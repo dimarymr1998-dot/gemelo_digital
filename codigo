@@ -32,7 +32,7 @@
       </div>
       <div class="hidden lg:flex gap-2 text-sm text-gray-300">
         <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">C</span> Cobb</div>
-        <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">S</span> Tornillos</div>
+        <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">S</span> Tornillos (Clic)</div>
         <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">R</span> Reset</div>
         <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">E</span> Exportar</div>
       </div>
@@ -63,12 +63,14 @@
         <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">2. Herramientas de planificación</h3>
         <div id="tools-panel" class="flex flex-col gap-3 opacity-50 cursor-not-allowed">
           <button id="tool-cobb" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Medir ángulo de Cobb</button>
-          <button id="tool-screws" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Simular tornillos pediculares</button>
+          <!-- MODIFICADO: Texto del botón -->
+          <button id="tool-screws" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Colocar Tornillos (Interactivo)</button>
           <button id="tool-rod" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Simular corrección con barra</button>
         </div>
 
+        <!-- MODIFICADO: Texto de instrucción -->
         <div id="screw-instruction-panel" class="hidden mt-3 bg-gray-700/60 text-gray-200 p-3 rounded-md text-sm">
-          Tornillos pediculares simulados en vértebras móviles. Use la cámara para inspeccionar trayectorias.
+          <b>Modo Tornillos Activo:</b> Haga clic en una vértebra (ej. T7, L2) para colocar/quitar un par de tornillos pediculares.
         </div>
 
         <div id="cobb-results-panel" class="hidden mt-6 p-4 bg-gray-700 rounded-lg">
@@ -148,10 +150,10 @@
     let toolMode = null; // null | 'cobb' | 'screws' | 'rod'
 
     // Cobb
-    let selectedVertebrae = [];
+    let cobbClickPoints = []; // MODIFICADO: Almacena los 6 puntos (Vector3)
     let currentCobbAngle = 0.0;
     const COBB_POINTS_GROUP = new THREE.Group();
-    const originalColors = new Map();
+    // ELIMINADO: const originalColors = new Map();
     let savedCobbMeasurements = [];
 
     // Screws
@@ -216,6 +218,7 @@
         imagePreview.src = ev.target?.result;
         previewSection.classList.remove('hidden');
       };
+      // CORRECCIÓN: El método correcto es readAsDataURL (con 'Data')
       reader.readAsDataURL(file);
       simulateDigitalTwinGeneration();
     }
@@ -380,6 +383,7 @@
         body.userData.index = i;
         body.userData.type = vertebraType;
         body.userData.anatomicalName = anatomicalName; // Guardar el nombre para la UI
+        body.userData.screws = null; // MODIFICADO: Para rastrear tornillos
         // --- FIN DE MODIFICACIÓN ---
 
         g.add(body);
@@ -505,7 +509,9 @@
 
     // ---------- Interacción (raycast) ----------
     function onCanvasMouseDown(event){
-      if(toolMode==='screws' || toolMode==='rod') return;
+      // MODIFICADO: Permitir raycast para 'screws', bloquear solo 'rod'
+      if(toolMode==='rod') return; // Rod mode is not interactive
+
       const rect = canvas.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left)/rect.width)*2 - 1;
       mouse.y = -((event.clientY - rect.top)/rect.height)*2 + 1;
@@ -514,13 +520,36 @@
       const bodies = [];
       spineGroup?.traverse(obj=>{ if(obj.isMesh && obj.name.startsWith('VertebraBody_')) bodies.push(obj); });
       const hit = raycaster.intersectObjects(bodies, false);
-      if(!hit.length) return;
-      const selected = hit[0].object;
-      if(toolMode==='cobb') handleCobbSelection(selected);
+      
+      if(!hit.length) {
+        // --- NUEVO ---
+        // Si estamos en modo cobb y hacemos clic en el espacio vacío, no hacer nada.
+        if (toolMode === 'cobb') {
+            showToast('Clic fallido. Apunte a una vértebra.');
+        }
+        return;
+      }
+      
+      // MODIFICADO: Renombrado para claridad
+      const selectedObject = hit[0].object;
+      // MODIFICADO: Obtenemos el punto exacto del clic
+      const clickPoint = hit[0].point; // The precise Vector3 of the click
+
+      // MODIFICADO: Enrutar según el modo de herramienta
+      if(toolMode==='cobb') {
+        // --- NUEVA LÓGICA ---
+        // Pasamos el objeto {punto, nombre}
+        handleCobbPointClick({ 
+          point: clickPoint, 
+          name: selectedObject.userData.anatomicalName 
+        });
+      } else if (toolMode === 'screws') {
+        handleScrewSelection(selectedObject);
+      }
     }
 
     // ---------- Herramientas ----------
-    function resetToolMode(keepCobbPanel=false){
+    function resetToolMode(keepCobbPanel=false){ // MODIFICADO: keepScrews ya no es necesario
       const prev = toolMode; toolMode = null;
       cobbButton.classList.remove('tool-active');
       screwsButton.classList.remove('tool-active');
@@ -528,16 +557,30 @@
       screwInstructionPanel.classList.add('hidden');
       if(!keepCobbPanel || prev !== 'cobb') cobbResultsPanel.classList.add('hidden');
 
-      // Restaurar colores Cobb
-      selectedVertebrae.forEach(m=>{ const hex = originalColors.get(m.uuid); if(hex!==undefined) m.material.color.setHex(hex); });
-      selectedVertebrae = []; currentCobbAngle = 0.0;
+      // MODIFICADO: La restauración de color ya no es necesaria para Cobb
+      // selectedVertebrae.forEach(m=>{ ... }); // ELIMINADO
+      cobbClickPoints = []; // --- NUEVO ---
+      currentCobbAngle = 0.0;
       COBB_POINTS_GROUP.clear();
       cobbActions.classList.add('hidden');
-      cobbInstruction.textContent = 'Seleccione la vértebra superior y luego la inferior en el modelo 3D.';
-      cobbSelectedPoints.innerHTML = 'Punto 1: Ninguno<br/>Punto 2: Ninguno';
+      // --- MODIFICADO: Nuevos textos de UI para el modo de 6 puntos ---
+      cobbInstruction.textContent = 'Seleccione 3 puntos en la placa superior de la vértebra superior.';
+      cobbSelectedPoints.innerHTML = 'Puntos placa superior: 0/3<br/>Puntos placa inferior: 0/3';
       cobbResult.textContent = '0.0°';
 
-      if(prev==='screws') SCREWS_GROUP.clear();
+      // MODIFICADO: La limpieza de tornillos se ha movido al listener de 'R' y 'simulateDigitalTwinGeneration'
+      /* ELIMINADO:
+      if(prev==='screws' && !keepScrews) {
+        // Limpiar referencias en userData
+        spineGroup?.traverse(obj => { 
+          if (obj.isMesh && obj.name.startsWith('VertebraBody_')) { 
+            obj.userData.screws = null; 
+          } 
+        });
+        SCREWS_GROUP.clear();
+      }
+      */
+      
       if(prev==='rod') RODS_GROUP.clear();
     }
 
@@ -549,31 +592,37 @@
       showToast('Modo Cobb activo');
     });
 
+    // MODIFICADO: Event listener del botón de tornillos
     screwsButton.addEventListener('click', ()=>{
       if(toolMode==='screws'){ resetToolMode(); return; }
-      resetToolMode(); toolMode='screws'; screwsButton.classList.add('tool-active');
+      resetToolMode(); 
+      toolMode='screws'; 
+      screwsButton.classList.add('tool-active');
       screwInstructionPanel.classList.remove('hidden');
-      placeAllPedicleScrews();
-      showToast('Tornillos colocados automáticamente');
+      // YA NO se llama a placeAllPedicleScrews()
+      showToast('Modo Tornillos activo: Clic en vértebras');
     });
 
+    // MODIFICADO: Event listener del botón de barra
     rodButton.addEventListener('click', ()=>{
       if(toolMode==='rod'){ resetToolMode(); return; }
-      resetToolMode(); toolMode='rod'; rodButton.classList.add('tool-active');
-      if(SCREWS_GROUP.children.length===0) placeAllPedicleScrews();
-      simulateCorrectionRod();
-      showToast('Barra correctora simulada');
+      resetToolMode(); 
+      toolMode='rod'; 
+      rodButton.classList.add('tool-active');
+      // YA NO se colocan tornillos automáticamente
+      simulateCorrectionRod(); // La simulación ahora depende de que el usuario haya puesto tornillos
     });
 
     clearCobbButton.addEventListener('click', ()=> resetToolMode(true));
 
     saveCobbButton.addEventListener('click', ()=>{
-      if(selectedVertebrae.length===2 && currentCobbAngle>=0){
+      // --- MODIFICADO: Comprobar 6 puntos ---
+      if(cobbClickPoints.length === 6 && currentCobbAngle > 0){
         
-        // --- INICIO DE CORRECCIÓN ---
-        // Definir v1Name y v2Name aquí, leyendo de selectedVertebrae
-        const v1Name = selectedVertebrae[0].userData.anatomicalName;
-        const v2Name = selectedVertebrae[1].userData.anatomicalName;
+        // --- INICIO DE CORRECCIÓN (Modo 6 puntos) ---
+        // Tomar el nombre de la vértebra del primer y cuarto set de puntos
+        const v1Name = cobbClickPoints[0].name; // Nombre del primer punto
+        const v2Name = cobbClickPoints[3].name; // Nombre del cuarto punto (inicio de placa inferior)
         // --- FIN DE CORRECCIÓN ---
 
         const entry = { id: savedCobbMeasurements.length+1, v1:v1Name, v2:v2Name, angle: currentCobbAngle.toFixed(1) };
@@ -600,169 +649,269 @@
       }
     }
 
-    function handleCobbSelection(mesh){
-      if(selectedVertebrae.includes(mesh)){
-        selectedVertebrae.forEach(m=>{ const hex = originalColors.get(m.uuid); if(hex!==undefined) m.material.color.setHex(hex); });
-        selectedVertebrae=[]; COBB_POINTS_GROUP.clear(); cobbInstruction.textContent='Seleccione la vértebra superior y luego la inferior en el modelo 3D.'; cobbSelectedPoints.innerHTML='Punto 1: Ninguno<br/>Punto 2: Ninguno'; cobbResult.textContent='0.0°'; cobbActions.classList.add('hidden');
-        return;
-      }
-      if(!originalColors.has(mesh.uuid)) originalColors.set(mesh.uuid, mesh.material.color.getHex());
-      
-      selectedVertebrae.push(mesh); 
-      mesh.material.color.setHex(0xffa500); // Color de resaltado
-      
-      // --- INICIO DE MODIFICACIÓN ---
-      // Leer 'anatomicalName' desde userData en lugar de generar 'V' + index
-      let v1 = selectedVertebrae[0]? selectedVertebrae[0].userData.anatomicalName :'Ninguno';
-      let v2 = selectedVertebrae[1]? selectedVertebrae[1].userData.anatomicalName :'Ninguno';
-      // --- FIN DE MODIFICACIÓN ---
-      cobbSelectedPoints.innerHTML = `Punto 1: ${v1}<br/>Punto 2: ${v2}`;
+    // --- ELIMINADO: handleCobbSelection(mesh) ---
+    // La lógica de selección de Cobb ahora se basa en puntos, no en mallas.
 
-      if(selectedVertebrae.length===2){
-        const i1 = selectedVertebrae[0].userData.index, i2 = selectedVertebrae[1].userData.index;
-        if(i1>i2){ 
-            selectedVertebrae.reverse(); 
-            // --- INICIO DE MODIFICACIÓN ---
-            v1=selectedVertebrae[0].userData.anatomicalName; 
-            v2=selectedVertebrae[1].userData.anatomicalName; 
-            // --- FIN de MODIFICACIÓN ---
-            cobbSelectedPoints.innerHTML=`Punto 1: ${v1}<br/>Punto 2: ${v2}`; 
+    // --- NUEVA GEOMETRÍA para los marcadores de puntos ---
+    const cobbPointGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+    const cobbPointMaterialTop = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8 });
+    const cobbPointMaterialBottom = new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.8 });
+
+    /**
+     * NUEVA FUNCIÓN
+     * Maneja el clic en modo Cobb, almacenando el punto exacto.
+     * @param {object} clickData - Objeto { point: THREE.Vector3, name: string }
+     */
+    function handleCobbPointClick(clickData) {
+        if (cobbClickPoints.length >= 6) {
+            showToast('Ya se han seleccionado 6 puntos. Limpie para una nueva medición.');
+            return;
         }
-        cobbInstruction.textContent='Medición lista. ¡Guarde o limpie para otra medición!';
-        cobbActions.classList.remove('hidden');
-        calculateCobbAngle();
-      } else cobbInstruction.textContent='Seleccione la vértebra inferior (Punto 2).';
+
+        // Añadir el punto (vector) y el nombre de la vértebra
+        cobbClickPoints.push(clickData);
+
+        // Visualizar el punto
+        const isTopPlate = cobbClickPoints.length <= 3;
+        const material = isTopPlate ? cobbPointMaterialTop : cobbPointMaterialBottom;
+        const pointMarker = new THREE.Mesh(cobbPointGeometry, material);
+        pointMarker.position.copy(clickData.point);
+        COBB_POINTS_GROUP.add(pointMarker);
+
+        updateCobbPanelUI();
+
+        if (cobbClickPoints.length === 3) {
+            // Dibujar el primer plano
+            calculateCobbAngleFromPoints();
+        } else if (cobbClickPoints.length === 6) {
+            // Dibujar el segundo plano y calcular el ángulo final
+            calculateCobbAngleFromPoints();
+            cobbActions.classList.remove('hidden');
+        }
     }
 
+    /**
+     * NUEVA FUNCIÓN
+     * Actualiza el panel de instrucciones de Cobb basado en cuántos puntos se han clicado.
+     */
+    function updateCobbPanelUI() {
+        const topPoints = Math.min(cobbClickPoints.length, 3);
+        const bottomPoints = Math.max(0, cobbClickPoints.length - 3);
+
+        cobbSelectedPoints.innerHTML = `Puntos placa superior: ${topPoints}/3<br/>Puntos placa inferior: ${bottomPoints}/3`;
+
+        if (cobbClickPoints.length < 3) {
+            cobbInstruction.textContent = `Seleccione el punto ${topPoints + 1}/3 en la placa superior.`;
+        } else if (cobbClickPoints.length === 3) {
+            cobbInstruction.textContent = 'Seleccione el punto 1/3 en la placa inferior.';
+        } else if (cobbClickPoints.length < 6) {
+            cobbInstruction.textContent = `Seleccione el punto ${bottomPoints + 1}/3 en la placa inferior.`;
+        } else {
+            cobbInstruction.textContent = '¡Medición completa! Guarde o limpie para continuar.';
+        }
+    }
+
+
     // ======== Utilidades matemáticas compartidas (expuestas para tests) ========
-    // --- INICIO DE CÓDIGO RESTAURADO ---
+    // --- INICIO DE CÓDIGO RESTAURADO (Solo la función necesaria) ---
     function acuteAngleRad(r){
       let d = Math.abs(r); if(d>Math.PI) d = 2*Math.PI - d; if(d>Math.PI/2) d = Math.PI - d; return d;
     }
-    function principalDirXY(points){
-      const n = points.length; if(n<2) return new THREE.Vector2(1,0);
-      let meanX=0, meanY=0; for(const p of points){ meanX+=p.x; meanY+=p.y; }
-      meanX/=n; meanY/=n;
-      let sxx=0, sxy=0, syy=0; for(const p of points){ const dx=p.x-meanX, dy=p.y-meanY; sxx+=dx*dx; sxy+=dx*dy; syy+=dy*dy; }
-      const tr = sxx+syy; const det = sxx*syy - sxy*sxy; const disc = Math.sqrt(Math.max(0,tr*tr/4 - det));
-      const lambda = tr/2 + disc; // mayor
-      let vx = sxy, vy = lambda - sxx; if(Math.abs(vx)+Math.abs(vy) < 1e-9){ vx = 1; vy = 0; }
-      return new THREE.Vector2(vx, vy).normalize();
-    }
+    
+    // --- ELIMINADO: principalDirXY, endplateAngle, y el antiguo calculateCobbAngle ---
+    // Estas funciones se basaban en el análisis de malla (PCA), que ha sido reemplazado.
 
-    // Cálculo preciso del Cobb por placas terminales (PCA sobre XY)
-    function calculateCobbAngle(){
-      if(selectedVertebrae.length!==2) return;
+    // --- NUEVA LÓGICA DE CÁLCULO DE COBB (basada en 3 puntos) ---
+    /**
+     * REEMPLAZO
+     * Calcula el ángulo de Cobb usando los 3 o 6 puntos del array global `cobbClickPoints`.
+     * Dibuja líneas que representan los planos definidos.
+     */
+    function calculateCobbAngleFromPoints() {
+        if (cobbClickPoints.length < 3) return;
 
-      function endplateAngle(mesh, which){
-        // Usar la geometría buffer original, no una clonada no indexada
-        const geom = mesh.geometry; 
-        const pos = geom.getAttribute('position');
-        const world = new THREE.Matrix4(); mesh.updateWorldMatrix(true,false); 
-        // --- INICIO DE CORRECCIÓN ---
-        // El método correcto es copiar la propiedad .matrixWorld
-        world.copy(mesh.matrixWorld);
-        // --- FIN DE CORRECCIÓN ---
-        const pts = [];
-        // Iterar sobre los vértices para encontrar los de la placa terminal
-        let minY=Infinity, maxY=-Infinity;
-        const tempV = new THREE.Vector3();
-        for(let i=0;i<pos.count;i++){
-            tempV.fromBufferAttribute(pos, i);
-            if(which === 'superior' && tempV.y < 0.4) continue; // Optimización: solo tomar mitad superior
-            if(which === 'inferior' && tempV.y > -0.4) continue; // Optimización: solo tomar mitad inferior
+        const lineMaterialTop = new THREE.LineBasicMaterial({ color: 0x00ff00 }); // Verde
+        const lineMaterialBottom = new THREE.LineBasicMaterial({ color: 0xffa500 }); // Naranja
+        
+        // Helper para dibujar la línea del plano
+        function drawPlaneLine(plane, center, material) {
+            // Crear una línea que yace en el plano
+            const len = 22;
+            // Proyectar un vector (ej. eje X) sobre el plano para obtener una dirección
+            let lineDir = new THREE.Vector3(1, 0, 0);
+            let projectedCenter = plane.projectPoint(new THREE.Vector3(0,0,0), new THREE.Vector3());
+            plane.projectPoint(lineDir, lineDir); // Proyectar
+            lineDir.sub(projectedCenter); // Obtener dirección
+            lineDir.normalize();
+
+            // Fallback si el eje X es (casi) normal al plano
+            if (lineDir.lengthSq() < 0.5) { 
+                lineDir.set(0, 1, 0);
+                plane.projectPoint(lineDir, lineDir);
+                lineDir.sub(projectedCenter);
+                lineDir.normalize();
+            }
+
+            const p1 = center.clone().addScaledVector(lineDir, len / 2);
+            const p2 = center.clone().addScaledVector(lineDir, -len / 2);
             
-            tempV.applyMatrix4(world);
-            pts.push(tempV.clone()); // Clonar el vector transformado
-            if(tempV.y<minY) minY=tempV.y; if(tempV.y>maxY) maxY=tempV.y;
-        }
-        
-        const h = maxY - minY; 
-        if(h < 1e-6) return 0; // Evitar división por cero si la malla es plana
-        const thr = h*0.08; // 8% superior/inferior
-        
-        const band = pts.filter(p => which==='superior' ? (p.y > maxY - thr) : (p.y < minY + thr));
-        
-        if(band.length<6) {
-            console.warn(`Pocos puntos encontrados para placa ${which} en ${mesh.name}. Usando todos los puntos.`, band.length);
-            // Fallback: usar todos los puntos si el filtrado falla
-            if(pts.length < 6) return 0; // No se puede calcular
-            const proj = pts.map(p=> new THREE.Vector2(p.x, p.y));
-            const dir = principalDirXY(proj);
-            return Math.atan2(dir.y, dir.x);
+            const geom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+            const line = new THREE.Line(geom, material);
+            COBB_POINTS_GROUP.add(line);
         }
 
-        const proj = band.map(p=> new THREE.Vector2(p.x, p.y));
-        const dir = principalDirXY(proj);
-        return Math.atan2(dir.y, dir.x);
-      }
+        // Calcular y dibujar el primer plano (superior)
+        const p1 = cobbClickPoints[0].point;
+        const p2 = cobbClickPoints[1].point;
+        const p3 = cobbClickPoints[2].point;
+        const planeTop = new THREE.Plane().setFromCoplanarPoints(p1, p2, p3);
+        const centerTop = p1.clone().add(p2).add(p3).divideScalar(3); // Centroide
+        
+        // Limpiar líneas viejas (si las hay) antes de dibujar nuevas
+        // (Mantenemos los marcadores de esfera, solo quitamos las líneas)
+        COBB_POINTS_GROUP.children = COBB_POINTS_GROUP.children.filter(c => !c.isLine);
 
-      const topMesh  = selectedVertebrae[0];
-      const lowMesh  = selectedVertebrae[1];
-      const angTop = endplateAngle(topMesh, 'superior');
-      const angLow = endplateAngle(lowMesh, 'inferior');
-      currentCobbAngle = THREE.MathUtils.radToDeg( acuteAngleRad( angTop - angLow ) );
+        drawPlaneLine(planeTop, centerTop, lineMaterialTop);
 
-      // --- Dibujo de líneas guía ---
-      COBB_POINTS_GROUP.clear();
-      const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
-      const perpMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
-      const len = 22, lenP = 26;
+        // Si solo tenemos 3 puntos, hemos terminado por ahora
+        if (cobbClickPoints.length < 6) {
+            cobbResult.textContent = '...';
+            return;
+        }
 
-      function drawLine(mesh, angle, up){
-        const bb = new THREE.Box3().setFromObject(mesh);
-        const center = bb.getCenter(new THREE.Vector3());
-        const y = up ? (bb.max.y + 0.1) : (bb.min.y - 0.1);
-        const geomP = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(-len/2,0,0), new THREE.Vector3(len/2,0,0)
-        ]);
-        const L = new THREE.Line(geomP, lineMaterial); L.position.set(center.x, y, center.z); L.rotation.z = angle; COBB_POINTS_GROUP.add(L);
-        const geomPerp = new THREE.BufferGeometry().setFromPoints([
-          new THREE.Vector3(0,-lenP/2,0), new THREE.Vector3(0,lenP/2,0)
-        ]);
-        const P = new THREE.Line(geomPerp, perpMaterial); P.position.copy(L.position); P.rotation.z = angle + Math.PI/2; COBB_POINTS_GROUP.add(P);
-      }
-      drawLine(topMesh, angTop, true);
-      drawLine(lowMesh, angLow, false);
+        // Calcular y dibujar el segundo plano (inferior)
+        const p4 = cobbClickPoints[3].point;
+        const p5 = cobbClickPoints[4].point;
+        const p6 = cobbClickPoints[5].point;
+        const planeBottom = new THREE.Plane().setFromCoplanarPoints(p4, p5, p6);
+        const centerBottom = p4.clone().add(p5).add(p6).divideScalar(3); // Centroide
 
-      cobbResult.textContent = `${currentCobbAngle.toFixed(1)}°`;
+        drawPlaneLine(planeBottom, centerBottom, lineMaterialBottom);
+
+        // Calcular el ángulo
+        // El ángulo entre los planos es el ángulo agudo entre sus normales
+        const angleRad = planeTop.normal.angleTo(planeBottom.normal);
+        currentCobbAngle = THREE.MathUtils.radToDeg(acuteAngleRad(angleRad));
+
+        cobbResult.textContent = `${currentCobbAngle.toFixed(1)}°`;
     }
-    // --- FIN DE CÓDIGO RESTAURADO ---
+    // --- FIN DE NUEVA LÓGICA DE COBB ---
 
     // --- INICIO DE CÓDIGO RESTAURADO (PARA FIJAR 'END OF INPUT') ---
-    function placeAllPedicleScrews(){
-      SCREWS_GROUP.clear();
-      spineGroup.children.forEach(child=>{
-        if(child.isGroup && child.children.length>0){
-          const body = child.children.find(m=>m.isMesh && m.name.startsWith('VertebraBody_'));
-          if(!body) return;
-          const parent = body.parent; const center = new THREE.Vector3(); body.getWorldPosition(center);
-          const radius = body.geometry.parameters?.radiusTop || body.geometry.parameters?.radius || 1.0;
-          const posterior = -radius*0.5; const lateral = radius*0.8;
-          const Llocal = new THREE.Vector3(-lateral, 0, posterior); const Rlocal = new THREE.Vector3(lateral, 0, posterior);
-          const L = Llocal.clone().applyMatrix4(parent.matrixWorld), R = Rlocal.clone().applyMatrix4(parent.matrixWorld);
-          const screwL = new THREE.Mesh(screwGeometry, screwMaterial); screwL.position.copy(L);
-          screwL.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, L).normalize()));
-          const screwR = new THREE.Mesh(screwGeometry, screwMaterial); screwR.position.copy(R);
-          screwR.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, R).normalize()));
-          SCREWS_GROUP.add(screwL, screwR);
-        }
-      });
-      if(!scene.children.includes(SCREWS_GROUP)) scene.add(SCREWS_GROUP);
+
+    /**
+     * NUEVA FUNCIÓN (Restaurada)
+     * Maneja el clic en modo Tornillos, decidiendo si colocar o quitar.
+     * @param {THREE.Mesh} bodyMesh - La malla del cuerpo vertebral clicada.
+     */
+    function handleScrewSelection(bodyMesh) {
+      // Comprobar si esta vértebra ya tiene tornillos
+      if (bodyMesh.userData.screws && bodyMesh.userData.screws.length > 0) {
+        // Si sí, quitarlos
+        removePedicleScrewsAt(bodyMesh);
+        showToast(`Tornillos quitados de ${bodyMesh.userData.anatomicalName}`);
+      } else {
+        // Si no, colocarlos
+        placePedicleScrewsAt(bodyMesh);
+        showToast(`Tornillos colocados en ${bodyMesh.userData.anatomicalName}`);
+      }
     }
 
+    /**
+     * Coloca un par de tornillos pediculares en una vértebra específica.
+     * @param {THREE.Mesh} bodyMesh - La malla del cuerpo vertebral (ej. VertebraBody_T7).
+     */
+    function placePedicleScrewsAt(bodyMesh) {
+      const parent = bodyMesh.parent; // El THREE.Group que contiene esta vértebra
+      if (!parent || !bodyMesh.geometry.parameters) {
+        console.warn('No se puede colocar tornillo: falta el grupo padre o los parámetros de geometría.');
+        return;
+      }
+
+      const center = new THREE.Vector3(); 
+      bodyMesh.getWorldPosition(center);
+      
+      // Estimar posiciones de pedículos (lógica similar a la función eliminada)
+      const radius = bodyMesh.geometry.parameters?.radiusTop || bodyMesh.geometry.parameters?.radius || 1.0;
+      const posterior = -radius * 0.5;
+      const lateral = radius * 0.8;
+      
+      const Llocal = new THREE.Vector3(-lateral, 0, posterior); 
+      const Rlocal = new THREE.Vector3(lateral, 0, posterior);
+      
+      // Convertir posiciones locales (relativas al cuerpo) a posiciones globales (mundo)
+      const L = Llocal.clone().applyMatrix4(parent.matrixWorld);
+      const R = Rlocal.clone().applyMatrix4(parent.matrixWorld);
+      
+      // Crear y orientar tornillo izquierdo
+      const screwL = new THREE.Mesh(screwGeometry, screwMaterial); 
+      screwL.position.copy(L);
+      screwL.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, L).normalize()));
+      
+      // Crear y orientar tornillo derecho
+      const screwR = new THREE.Mesh(screwGeometry, screwMaterial); 
+      screwR.position.copy(R);
+      screwR.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, R).normalize()));
+
+      SCREWS_GROUP.add(screwL, screwR);
+
+      // Guardar referencia a los tornillos en la malla de la vértebra
+      bodyMesh.userData.screws = [screwL, screwR];
+    }
+
+    /**
+     * Quita un par de tornillos pediculares de una vértebra específica.
+     * @param {THREE.Mesh} bodyMesh - La malla del cuerpo vertebral.
+     */
+    function removePedicleScrewsAt(bodyMesh) {
+      const screws = bodyMesh.userData.screws;
+      if (screws && screws.length > 0) {
+        screws.forEach(screw => {
+          SCREWS_GROUP.remove(screw);
+          // Opcional: disponer geometría/material si ya no se usan, pero
+          // dado que usamos un material y geometría compartidos, no es necesario.
+        });
+      }
+      // Limpiar la referencia
+      bodyMesh.userData.screws = null;
+    }
+
+    // --- FIN DE NUEVAS FUNCIONES ---
+
+    // --- placeAllPedicleScrews() HA SIDO ELIMINADA ---
+
+    // MODIFICADO: Simulación de barra
     function simulateCorrectionRod(){
       RODS_GROUP.clear();
-      if(SCREWS_GROUP.children.length<4) return;
+
+      // Comprobar si hay suficientes tornillos
+      if(SCREWS_GROUP.children.length < 4) {
+         showToast('Error: Debe colocar al menos 4 tornillos (en 2 vértebras) para simular una barra.');
+         resetToolMode(); // Salir del modo "rod"
+         return;
+      }
+      
+      // Asumimos que los tornillos se añaden en pares L/R
       const leftScrews = SCREWS_GROUP.children.filter((_,idx)=> idx%2===0);
-      const worldPos = leftScrews.map(m=>{ const v=new THREE.Vector3(); m.getWorldPosition(v); return {m, y:v.y, v}; }).sort((a,b)=>b.y-a.y);
+      
+      // Ordenar tornillos por posición 'y' (de arriba a abajo en la escena)
+      const worldPos = leftScrews.map(m=>{ 
+        const v=new THREE.Vector3(); 
+        m.getWorldPosition(v); 
+        return {m, y:v.y, v}; 
+      }).sort((a,b)=>b.y-a.y); // Ordenar de mayor Y a menor Y (arriba a abajo)
+      
       const points = worldPos.map(o=>o.v);
+      
       const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
       const tube = new THREE.TubeGeometry(curve, Math.max(20, points.length*3), 0.15, 8, false);
       const rodMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 });
       const rod = new THREE.Mesh(tube, rodMat);
+      
       RODS_GROUP.add(rod);
       if(!scene.children.includes(RODS_GROUP)) scene.add(RODS_GROUP);
+      
+      showToast('Barra correctora simulada');
     }
 
     // ---------- Exportación ----------
@@ -780,6 +929,7 @@
       showToast('Plan exportado (JSON + PNG)');
     });
 
+    // Esta función no necesita cambios, ya que lee dinámicamente de SCREWS_GROUP
     function buildExportPayload(){
       const screws = SCREWS_GROUP.children.map((m,idx)=>{
         const p = new THREE.Vector3(); m.getWorldPosition(p);
@@ -804,7 +954,22 @@
       const k = e.key.toLowerCase();
       if(k==='c') cobbButton.click();
       if(k==='s') screwsButton.click();
-      if(k==='r') { resetToolMode(); showToast('Herramientas reiniciadas'); }
+      if(k==='r') { 
+        // --- MODIFICACIÓN ---
+        // Limpieza explícita de objetos persistentes (tornillos)
+        if (spineGroup) {
+          spineGroup.traverse(obj => { 
+            if (obj.isMesh && obj.name.startsWith('VertebraBody_')) { 
+              obj.userData.screws = null; 
+            } 
+          });
+        }
+        SCREWS_GROUP.clear();
+        // resetToolMode ahora solo limpia el estado de la UI
+        resetToolMode(); 
+        showToast('Herramientas reiniciadas'); 
+        // --- FIN DE MODIFICACIÓN ---
+      }
       if(k==='e' && !exportButton.disabled) exportButton.click();
     });
 
@@ -816,15 +981,25 @@
         const d1 = acuteAngleRad(THREE.MathUtils.degToRad(170));
         console.assert(Math.abs(THREE.MathUtils.radToDeg(d1)-10)<1e-6, 'acuteAngleRad falla para 170°');
 
-        // Test 2: principalDirXY con línea 45°
-        const pts = Array.from({length:20}, (_,i)=> new THREE.Vector2(i, i));
-        const dir = principalDirXY(pts); const ang = Math.atan2(dir.y, dir.x);
-        console.assert(Math.abs(THREE.MathUtils.radToDeg(ang)-45)<0.5, 'PCA 2D falla para línea 45°');
+        // MODIFICADO: Eliminar test de principalDirXY y añadir test de plano
+        // Test 2: Lógica de Plano
+        const p1 = new THREE.Vector3(0, 0, 0);
+        const p2 = new THREE.Vector3(1, 0, 0);
+        const p3 = new THREE.Vector3(0, 1, 0);
+        const planeXY = new THREE.Plane().setFromCoplanarPoints(p1, p2, p3);
+        // El normal debe ser (0, 0, 1) o (0, 0, -1)
+        console.assert(Math.abs(planeXY.normal.z) > 0.99, 'Cálculo de plano falla para plano XY');
+
+        const p4 = new THREE.Vector3(0, 0, 0);
+        const p5 = new THREE.Vector3(1, 1, 0);
+        const p6 = new THREE.Vector3(0, 1, 0);
+        const planeXY_2 = new THREE.Plane().setFromCoplanarPoints(p4, p5, p6);
+        console.assert(Math.abs(planeXY_2.normal.z) > 0.99, 'Cálculo de plano falla para plano XY (2)');
 
         console.groupEnd();
       }catch(err){
         console.error('SelfTests error:', err);
-        showToast('⚠️ Fallaron tests internos. Ver consola.');
+        showToast(' Fallaron tests internos. Ver consola.');
       }
     }
 
