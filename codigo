@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gemelo Digital - Planificación de Escoliosis (Mejorado)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/"
+      }
+    }
+  </script>
+  <style>
+    #digital-twin-canvas { width: 100%; height: 100%; min-height: 520px; border-radius: 0.5rem; background:#111827; }
+    input[type="file"] { display:none; }
+    .custom-file-upload { display:inline-block; padding:0.75rem 1.25rem; cursor:pointer; background:#4f46e5; color:#fff; border-radius:0.5rem; font-weight:600; transition:background .3s; }
+    .custom-file-upload:hover { background:#4338ca; }
+    .tool-active { box-shadow:0 0 0 3px #10b981; background:#059669 !important; }
+    .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans antialiased">
+  <!-- Header -->
+  <header class="bg-gray-800 shadow-lg">
+    <div class="container mx-auto px-6 py-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-white">Plataforma de Gemelo Digital</h1>
+        <h2 class="text-lg text-indigo-300">Planificación prequirúrgica de escoliosis</h2>
+      </div>
+      <div class="hidden lg:flex gap-2 text-sm text-gray-300">
+        <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">C</span> Cobb</div>
+        <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">S</span> Tornillos</div>
+        <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">R</span> Reset</div>
+        <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">E</span> Exportar</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Sidebar -->
+    <aside class="lg:col-span-1 bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col gap-6">
+      <section>
+        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">1. Cargar imagen del paciente</h3>
+        <label for="file-upload" class="custom-file-upload">Seleccionar archivo (JPG/PNG)…</label>
+        <input id="file-upload" type="file" accept="image/jpeg,image/png" />
+        <p id="file-name" class="text-gray-400 text-sm mt-3">Ningún archivo seleccionado.</p>
+        <div id="dropzone" class="mt-3 p-4 rounded-lg border border-dashed border-gray-600 text-gray-300 text-sm">
+          Arrastra y suelta aquí la imagen del paciente
+        </div>
+      </section>
+
+      <section id="preview-section" class="hidden">
+        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Previsualización 2D</h3>
+        <div class="bg-gray-900 p-2 rounded-lg">
+          <img id="image-preview" src="#" alt="Previsualización del paciente" class="w-full rounded-md object-contain max-h-64" />
+        </div>
+      </section>
+
+      <section>
+        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">2. Herramientas de planificación</h3>
+        <div id="tools-panel" class="flex flex-col gap-3 opacity-50 cursor-not-allowed">
+          <button id="tool-cobb" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Medir ángulo de Cobb</button>
+          <button id="tool-screws" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Simular tornillos pediculares</button>
+          <button id="tool-rod" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Simular corrección con barra</button>
+        </div>
+
+        <div id="screw-instruction-panel" class="hidden mt-3 bg-gray-700/60 text-gray-200 p-3 rounded-md text-sm">
+          Tornillos pediculares simulados en vértebras móviles. Use la cámara para inspeccionar trayectorias.
+        </div>
+
+        <div id="cobb-results-panel" class="hidden mt-6 p-4 bg-gray-700 rounded-lg">
+          <h4 class="text-lg font-bold text-green-300 mb-2">Análisis de ángulo de Cobb</h4>
+          <p id="cobb-instruction" class="text-sm text-gray-300 mb-2">Seleccione la vértebra superior y luego la inferior en el modelo 3D.</p>
+          <div id="cobb-selected-points" class="text-sm text-yellow-300">Punto 1: Ninguno<br/>Punto 2: Ninguno</div>
+          <p id="cobb-result" class="text-3xl font-extrabold mt-4 text-green-400">0.0°</p>
+          <div id="cobb-actions" class="mt-4 flex gap-2 hidden">
+            <button id="save-cobb" class="w-1/2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-3 rounded-lg transition">Guardar medición</button>
+            <button id="clear-cobb" class="w-1/2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-3 rounded-lg transition">Limpiar selección</button>
+          </div>
+        </div>
+
+        <div id="cobb-history-panel" class="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700 hidden">
+          <h4 class="text-lg font-bold text-indigo-300 mb-3 border-b border-gray-700 pb-2">Mediciones guardadas</h4>
+          <ul id="cobb-measurements-list" class="space-y-2">
+            <li class="text-gray-400 italic">No hay mediciones guardadas.</li>
+          </ul>
+        </div>
+
+        <button id="tool-export" class="w-full text-left bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-lg transition mt-4 disabled:opacity-50" disabled>Exportar plan quirúrgico</button>
+      </section>
+    </aside>
+
+    <!-- Canvas 3D -->
+    <section class="lg:col-span-2 bg-gray-800 p-6 rounded-lg shadow-xl">
+      <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">3. Gemelo Digital 3D</h3>
+      <div id="canvas-container" class="relative w-full h-[520px] lg:h-[620px] bg-gray-900 rounded-lg overflow-hidden">
+        <div id="loading-message" class="absolute inset-0 flex flex-col items-center justify-center z-10">
+          <svg id="initial-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600"><path d="M5 12s2.545-5 7-5c4.454 0 7 5 7 5s-2.546 5-7 5c-4.455 0-7-5-7-5z"/><path d="M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M2 12s2.946-8 10-8 10 8 10 8-2.946 8-10 8S2 12 2 12z"/></svg>
+          <p id="loading-text" class="text-gray-500 text-lg mt-4">Cargue una imagen para generar el gemelo digital.</p>
+        </div>
+        <canvas id="digital-twin-canvas"></canvas>
+        <!-- Toast -->
+        <div id="toast" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-4 py-2 rounded-full"></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    // Imports
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    // SubdivisionModifier se cargará dinámicamente para evitar romper la app si el CDN cambia la ruta
+
+    // Utilidad: carga dinámica segura del SubdivisionModifier
+    let SubdivisionModifierSafe = null;
+    async function loadSubdivisionModifier(){
+      if(SubdivisionModifierSafe) return SubdivisionModifierSafe;
+      try{
+        const mod = await import('three/addons/modifiers/SubdivisionModifier.js');
+        SubdivisionModifierSafe = mod.SubdivisionModifier || null;
+      }catch(err){
+        console.warn('SubdivisionModifier no disponible, continuando sin subdivisión:', err);
+        SubdivisionModifierSafe = null;
+      }
+      return SubdivisionModifierSafe;
+    }
+
+    // ---------- Estado global ----------
+    let scene, camera, renderer, controls, spineGroup;
+    const canvas = document.getElementById('digital-twin-canvas');
+    const canvasContainer = document.getElementById('canvas-container');
+    const fileUpload = document.getElementById('file-upload');
+    const dropzone = document.getElementById('dropzone');
+    const fileNameEl = document.getElementById('file-name');
+    const imagePreview = document.getElementById('image-preview');
+    const previewSection = document.getElementById('preview-section');
+    const loadingMessage = document.getElementById('loading-message');
+    const loadingText = document.getElementById('loading-text');
+    const initialIcon = document.getElementById('initial-icon');
+    const toolsPanel = document.getElementById('tools-panel');
+    const toast = document.getElementById('toast');
+
+    let toolMode = null; // null | 'cobb' | 'screws' | 'rod'
+
+    // Cobb
+    let selectedVertebrae = [];
+    let currentCobbAngle = 0.0;
+    const COBB_POINTS_GROUP = new THREE.Group();
+    const originalColors = new Map();
+    let savedCobbMeasurements = [];
+
+    // Screws
+    const SCREWS_GROUP = new THREE.Group();
+    const screwMaterial = new THREE.MeshStandardMaterial({ color: 0xFFA500, metalness: 0.8, roughness: 0.2 });
+    const screwGeometry = new THREE.CylinderGeometry(0.1, 0.1, 3.5, 8);
+    screwGeometry.translate(0, 1.75, 0);
+
+    // Rods (barra correctora)
+    const RODS_GROUP = new THREE.Group();
+
+    // DOM refs
+    const cobbButton = document.getElementById('tool-cobb');
+    const screwsButton = document.getElementById('tool-screws');
+    const rodButton = document.getElementById('tool-rod');
+    const cobbResultsPanel = document.getElementById('cobb-results-panel');
+    const cobbInstruction = document.getElementById('cobb-instruction');
+    const cobbSelectedPoints = document.getElementById('cobb-selected-points');
+    const cobbResult = document.getElementById('cobb-result');
+    const cobbActions = document.getElementById('cobb-actions');
+    const saveCobbButton = document.getElementById('save-cobb');
+    const clearCobbButton = document.getElementById('clear-cobb');
+    const cobbHistoryPanel = document.getElementById('cobb-history-panel');
+    const cobbMeasurementsList = document.getElementById('cobb-measurements-list');
+    const screwInstructionPanel = document.getElementById('screw-instruction-panel');
+    const exportButton = document.getElementById('tool-export');
+
+    // Raycaster
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    // ---------- Utilidades UI ----------
+    function showToast(msg, timeout = 1800) {
+      toast.textContent = msg;
+      toast.classList.remove('hidden');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(() => toast.classList.add('hidden'), timeout);
+    }
+
+    function enableTools() {
+      toolsPanel.classList.remove('opacity-50', 'cursor-not-allowed');
+      toolsPanel.querySelectorAll('.tool-button').forEach(btn => btn.disabled = false);
+      exportButton.disabled = false;
+    }
+
+    // ---------- Carga de imagen ----------
+    fileUpload.addEventListener('change', (e) => handleFile(e.target.files?.[0]));
+
+    ;['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.add('bg-gray-700/40');}));
+    ;['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.remove('bg-gray-700/40');}));
+    dropzone.addEventListener('drop', (e)=>{
+      const file = e.dataTransfer?.files?.[0];
+      if(file) handleFile(file);
+    });
+
+    function handleFile(file){
+      if(!file) return;
+      if(!/^image\/(jpeg|png)$/.test(file.type)) { showToast('Formato no soportado. Use JPG o PNG.'); return; }
+      fileNameEl.textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (ev)=>{
+        imagePreview.src = ev.target?.result;
+        previewSection.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+      simulateDigitalTwinGeneration();
+    }
+
+    // ---------- Simulación de procesamiento ----------
+    function simulateDigitalTwinGeneration(){
+      loadingText.textContent = 'Analizando puntos clave… construyendo modelo anatómico 3D…';
+      initialIcon.classList.add('hidden');
+      loadingMessage.classList.remove('hidden');
+      savedCobbMeasurements = [];
+      updateCobbHistoryUI();
+      resetToolMode();
+
+      // Limpiar escena previa con liberación segura de recursos
+      if(scene){
+        scene.remove(spineGroup, COBB_POINTS_GROUP, SCREWS_GROUP, RODS_GROUP);
+        disposeObject(spineGroup);
+        COBB_POINTS_GROUP.clear();
+        SCREWS_GROUP.clear();
+        RODS_GROUP.clear();
+      }
+
+      setTimeout(()=>{
+        loadingMessage.classList.add('hidden');
+        if(!renderer) initThreeJS();
+        else {
+          spineGroup = createScolioticSpine();
+          scene.add(spineGroup, COBB_POINTS_GROUP, SCREWS_GROUP, RODS_GROUP);
+        }
+        enableTools();
+        canvas.addEventListener('mousedown', onCanvasMouseDown, false);
+        showToast('Gemelo digital generado');
+      }, 1200);
+    }
+
+    function disposeObject(obj){
+      if(!obj) return;
+      obj.traverse((child)=>{
+        if(child.isMesh){
+          child.geometry?.dispose?.();
+          if(child.material){
+            if(Array.isArray(child.material)) child.material.forEach(m=>m?.dispose?.());
+            else if(child.material !== screwMaterial) child.material.dispose?.();
+          }
+        }
+      });
+    }
+
+    // ---------- Inicializar Three.js ----------
+    function initThreeJS(){
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x1a202c);
+
+      const aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+      camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+      camera.position.set(20, 10, 30);
+      camera.lookAt(0, 10, 0);
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+      const DPR = Math.min(window.devicePixelRatio || 1, 2);
+      renderer.setPixelRatio(DPR);
+      renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      new RGBELoader().load('https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr', (tex)=>{
+        const env = pmrem.fromEquirectangular(tex).texture; scene.environment = env; tex.dispose(); pmrem.dispose();
+      });
+
+      scene.add(new THREE.AmbientLight(0x606060));
+      const dir = new THREE.DirectionalLight(0xffffff, 1.5); dir.position.set(5,10,7.5); scene.add(dir);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0,10,0);
+      controls.enableDamping = true; controls.dampingFactor = 0.05;
+
+      spineGroup = createScolioticSpine();
+      scene.add(spineGroup, COBB_POINTS_GROUP, SCREWS_GROUP, RODS_GROUP);
+
+      animate();
+      window.addEventListener('resize', debounce(onWindowResize, 150));
+    }
+
+    function animate(){
+      requestAnimationFrame(animate);
+      controls?.update?.();
+      renderer?.render?.(scene, camera);
+    }
+
+    function onWindowResize(){
+      if(!camera || !renderer) return;
+      const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
+      camera.aspect = w/h; camera.updateProjectionMatrix();
+      renderer.setSize(w,h);
+    }
+
+    function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); } }
+
+    // ---------- Construcción de columna (procedural mejorada) ----------
+    function createScolioticSpine(){
+      const group = new THREE.Group();
+
+      // Material con mejor respuesta especular y ligera variación de tono
+      const boneColor = new THREE.Color('#e7d7c9');
+      const vertebraMaterialBase = new THREE.MeshStandardMaterial({ color: boneColor, roughness: 0.6, metalness: 0.05 });
+      const discMaterialBase = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.85, metalness: 0.02 });
+
+      const NUM_CERVICAL = 7, NUM_THORACIC = 12, NUM_LUMBAR = 5, NUM_MOBILE = 24;
+      const baseVertebraHeight = 1.0, baseDiscHeight = 0.25;
+
+      let currentY = 0;
+
+      // Utilidades
+      // Cargaremos el modificador de forma perezosa (lazy) y usaremos no-op si falla
+      let subd = { modify: (g)=> g };
+      if(!SubdivisionModifierSafe){
+        // intentar cargar; si falla, seguimos con no-op
+        loadSubdivisionModifier().then((Cls)=>{ if(Cls){ subd = new Cls(1); } });
+      } else { subd = new SubdivisionModifierSafe(1); }
+      const rand = (a,b)=> THREE.MathUtils.lerp(a,b, Math.random());
+
+      function latheBodyProfile(scale, endplateConcavity=0.06){
+        // Perfil 2D del cuerpo vertebral (vista sagital) para LatheGeometry
+        const r = 1.2 * scale;
+        const h = 0.9 * scale;
+        const pts = [];
+        const steps = 12;
+        for(let i=0;i<=steps;i++){
+          const t = i/steps; // 0..1 de inferior a superior
+          const y = -h/2 + h*t;
+          // ligero abombamiento central y concavidades en placas terminales
+          const belly = 1 - Math.pow(2*t-1, 2); // parabólico
+          let radius = r * (0.82 + 0.18*belly);
+          // concavidad en extremos
+          if(i===0 || i===steps){ radius *= (1 - endplateConcavity); }
+          pts.push(new THREE.Vector2(radius, y));
+        }
+        return pts;
+      }
+
+      function createVertebraDetailed(vertebraType, scale, i){
+        const g = new THREE.Group();
+
+        // 1) Cuerpo vertebral (Lathe + Subdivision)
+        const profile = latheBodyProfile(scale, vertebraType==='lumbar'?0.08:vertebraType==='thoracic'?0.06:0.05);
+        let bodyGeo = new THREE.LatheGeometry(profile, 28);
+        if(subd && subd.modify) bodyGeo = subd.modify(bodyGeo);
+        const body = new THREE.Mesh(bodyGeo, vertebraMaterialBase.clone());
+        body.castShadow = body.receiveShadow = true;
+        
+        // --- INICIO DE MODIFICACIÓN ---
+        // Asignar nombre anatómico estándar
+        let anatomicalName = 'Vertebra';
+        if (vertebraType === 'cervical') {
+            anatomicalName = `C${i + 1}`; // C1-C7
+        } else if (vertebraType === 'thoracic') {
+            anatomicalName = `T${i - NUM_CERVICAL + 1}`; // T1-T12
+        } else if (vertebraType === 'lumbar') {
+            anatomicalName = `L${i - (NUM_CERVICAL + NUM_THORACIC) + 1}`; // L1-L5
+        }
+        
+        body.name = `VertebraBody_${anatomicalName}`; // Actualizar el nombre del objeto
+        body.userData.index = i;
+        body.userData.type = vertebraType;
+        body.userData.anatomicalName = anatomicalName; // Guardar el nombre para la UI
+        // --- FIN DE MODIFICACIÓN ---
+
+        g.add(body);
+
+        // 2) Pedículos (cilindros cónicos sutiles)
+        if(vertebraType !== 'cervical'){
+          const pedR = 0.18*scale * (vertebraType==='lumbar'?1.3:1.0);
+          const pedL = new THREE.Mesh(new THREE.CylinderGeometry(pedR*0.9, pedR, 0.6*scale, 12), vertebraMaterialBase.clone());
+          const pedRMesh = pedL.clone();
+          pedL.rotation.z = Math.PI/2; pedRMesh.rotation.z = Math.PI/2;
+          const xOff = (vertebraType==='lumbar'?1.05:0.9)*scale;
+          const zOff = -0.25*scale;
+          pedL.position.set(-xOff, 0, zOff);
+          pedRMesh.position.set( xOff, 0, zOff);
+          g.add(pedL, pedRMesh);
+
+          // 3) Láminas + apófisis espinosa
+          const laminaW = (vertebraType==='lumbar'?1.2:0.9)*scale;
+          const laminaT = 0.18*scale;
+          const lamina = new THREE.Mesh(new THREE.BoxGeometry(laminaW, laminaT, 0.6*scale), vertebraMaterialBase.clone());
+          lamina.position.set(0, 0, -scale*1.0);
+          g.add(lamina);
+
+          const spinLen = (vertebraType==='thoracic'?1.8:vertebraType==='lumbar'?1.2:0.9)*scale;
+          const spin = new THREE.Mesh(new THREE.BoxGeometry(0.22*scale, 0.28*scale, spinLen), vertebraMaterialBase.clone());
+          spin.position.set(0, 0, -scale*1.0 - spinLen/2);
+          spin.rotation.x = (vertebraType==='thoracic'?0.55:vertebraType==='lumbar'?0.25:0.15);
+          g.add(spin);
+
+          // 4) Apófisis transversas
+          const transLen = (vertebraType==='lumbar'?1.9:vertebraType==='thoracic'?1.6:1.4)*scale;
+          const trans = new THREE.Mesh(new THREE.BoxGeometry(transLen, 0.22*scale, 0.22*scale), vertebraMaterialBase.clone());
+          trans.position.set(0, 0, -0.35*scale);
+          g.add(trans);
+        } else {
+          // Cervical: transversas con forámenes sugeridos
+          const transLen = 1.8*scale;
+          const trans = new THREE.Mesh(new THREE.BoxGeometry(transLen, 0.18*scale, 0.22*scale), vertebraMaterialBase.clone());
+          trans.position.set(0, 0, -0.15*scale);
+          g.add(trans);
+          const foramen = new THREE.Mesh(new THREE.TorusGeometry(0.18*scale, 0.06*scale, 8, 14), discMaterialBase.clone());
+          foramen.position.set(transLen/2 - 0.2*scale, 0, -0.15*scale);
+          const foramen2 = foramen.clone(); foramen2.position.x *= -1; g.add(foramen, foramen2);
+        }
+
+        // Guardar datos para discos
+        const bbox = new THREE.Box3().setFromObject(body);
+        const vHeight = bbox.getSize(new THREE.Vector3()).y;
+        g.userData.height = vHeight;
+        g.userData.radiusTop = profile[profile.length-1].x;
+        g.userData.radiusBottom = profile[0].x;
+        return g;
+      }
+
+      // Construcción con curvaturas y rotaciones por región (C-T-L) y ligera cuña en T
+      for(let i=0;i<NUM_MOBILE;i++){
+        let vertebraType, scaleFactor;
+        if(i<NUM_CERVICAL){
+          vertebraType='cervical';
+          scaleFactor = THREE.MathUtils.lerp(0.9,1.05, i/(NUM_CERVICAL-1));
+        } else if(i<NUM_CERVICAL+NUM_THORACIC){
+          vertebraType='thoracic';
+          scaleFactor = THREE.MathUtils.lerp(1.05,1.35,(i-NUM_CERVICAL)/(NUM_THORACIC-1));
+        } else {
+          vertebraType='lumbar';
+          scaleFactor = THREE.MathUtils.lerp(1.4,1.7,(i-(NUM_CERVICAL+NUM_THORACIC))/(NUM_LUMBAR-1));
+        }
+
+        const vertebra = createVertebraDetailed(vertebraType, scaleFactor, i);
+
+        // Curvaturas: coronal (escoliosis), sagital (lordosis/kyphosis), axial (rotación)
+        const t = i/(NUM_MOBILE-1);
+        const xCurv = Math.sin(t*Math.PI*2)*2.0; // desviación lateral
+        let zOff=0, rotX=0, rotY=0;
+        if(vertebraType==='cervical'){ zOff = Math.sin(t*Math.PI*2.5)*-0.8*scaleFactor; rotX = Math.sin(t*Math.PI)*-0.12; rotY = Math.sin(t*Math.PI)*0.18; }
+        else if(vertebraType==='thoracic'){ zOff = Math.sin(t*Math.PI*2.0)*1.3*scaleFactor; rotX = Math.sin(t*Math.PI)*0.22; rotY = Math.sin(t*Math.PI)*0.28; }
+        else { zOff = Math.sin(t*Math.PI*1.6)*-1.1*scaleFactor; rotX = Math.sin(t*Math.PI)*-0.2; rotY = Math.sin(t*Math.PI)*0.22; }
+
+        // Wedge (cuña) sutil en torácicas para simular deformidad
+        if(vertebraType==='thoracic'){
+          const wedge = THREE.MathUtils.lerp(-0.06, 0.06, Math.sin(t*Math.PI*2)*0.5+0.5);
+          vertebra.rotation.z += wedge; // ligera cuña en plano coronal
+        }
+
+        // Posicionar
+        vertebra.position.set(xCurv, currentY, zOff);
+        vertebra.rotation.x += rotX; vertebra.rotation.y += rotY;
+
+        group.add(vertebra);
+
+        // Discos intervertebrales
+        if(i<NUM_MOBILE-1){
+          const nextScale = (i+1<NUM_CERVICAL)?THREE.MathUtils.lerp(0.9,1.05,(i+1)/(NUM_CERVICAL-1))
+                           : (i+1<NUM_CERVICAL+NUM_THORACIC)?THREE.MathUtils.lerp(1.05,1.35,(i+1-NUM_CERVICAL)/(NUM_THORACIC-1))
+                           : THREE.MathUtils.lerp(1.4,1.7,(i+1-(NUM_CERVICAL+NUM_THORACIC))/(NUM_LUMBAR-1));
+          const discH = baseDiscHeight*THREE.MathUtils.lerp(0.9,1.2, nextScale/1.7);
+          const discR = Math.min(vertebra.userData.radiusTop, 1.2*nextScale)*0.95;
+          const discGeo = new THREE.CylinderGeometry(discR, discR*0.98, discH, 24);
+          const disc = new THREE.Mesh(discGeo, discMaterialBase.clone());
+          // posición entre centros de cuerpos
+          const nextY = currentY + vertebra.userData.height + discH/2;
+          disc.position.set(xCurv, nextY, zOff);
+          disc.rotation.x = vertebra.rotation.x; disc.rotation.y = vertebra.rotation.y;
+          group.add(disc);
+          currentY = nextY + discH/2; // avanzar pila
+        } else {
+          currentY += vertebra.userData.height;
+        }
+      }
+
+      // Sacro + coxis (más suaves)
+      const sacrumGeo = new THREE.CylinderGeometry(1.9, 1.2, 3.2, 28);
+      const sacrum = new THREE.Mesh((subd && subd.modify)? subd.modify(sacrumGeo) : sacrumGeo, vertebraMaterialBase.clone());
+      sacrum.position.set(0, currentY + 1.6, 1.2); sacrum.rotation.x = 0.45; group.add(sacrum);
+      currentY += 3.2;
+      const coccyx = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 12), vertebraMaterialBase.clone());
+      coccyx.position.set(0, currentY - 1.2, 0.9); coccyx.rotation.x = 0.9; group.add(coccyx);
+
+      // Elevar y orientar conjunto para cámara por defecto
+      group.rotation.x = Math.PI; group.position.y = (currentY/2) + 10;
+      return group;
+    }
+
+    // ---------- Interacción (raycast) ----------
+    function onCanvasMouseDown(event){
+      if(toolMode==='screws' || toolMode==='rod') return;
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left)/rect.width)*2 - 1;
+      mouse.y = -((event.clientY - rect.top)/rect.height)*2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      const bodies = [];
+      spineGroup?.traverse(obj=>{ if(obj.isMesh && obj.name.startsWith('VertebraBody_')) bodies.push(obj); });
+      const hit = raycaster.intersectObjects(bodies, false);
+      if(!hit.length) return;
+      const selected = hit[0].object;
+      if(toolMode==='cobb') handleCobbSelection(selected);
+    }
+
+    // ---------- Herramientas ----------
+    function resetToolMode(keepCobbPanel=false){
+      const prev = toolMode; toolMode = null;
+      cobbButton.classList.remove('tool-active');
+      screwsButton.classList.remove('tool-active');
+      rodButton.classList.remove('tool-active');
+      screwInstructionPanel.classList.add('hidden');
+      if(!keepCobbPanel || prev !== 'cobb') cobbResultsPanel.classList.add('hidden');
+
+      // Restaurar colores Cobb
+      selectedVertebrae.forEach(m=>{ const hex = originalColors.get(m.uuid); if(hex!==undefined) m.material.color.setHex(hex); });
+      selectedVertebrae = []; currentCobbAngle = 0.0;
+      COBB_POINTS_GROUP.clear();
+      cobbActions.classList.add('hidden');
+      cobbInstruction.textContent = 'Seleccione la vértebra superior y luego la inferior en el modelo 3D.';
+      cobbSelectedPoints.innerHTML = 'Punto 1: Ninguno<br/>Punto 2: Ninguno';
+      cobbResult.textContent = '0.0°';
+
+      if(prev==='screws') SCREWS_GROUP.clear();
+      if(prev==='rod') RODS_GROUP.clear();
+    }
+
+    cobbButton.addEventListener('click', ()=>{
+      if(toolMode==='cobb') { resetToolMode(); return; }
+      resetToolMode(true); toolMode='cobb'; cobbButton.classList.add('tool-active');
+      cobbResultsPanel.classList.remove('hidden');
+      if(savedCobbMeasurements.length>0) cobbHistoryPanel.classList.remove('hidden'); else cobbHistoryPanel.classList.add('hidden');
+      showToast('Modo Cobb activo');
+    });
+
+    screwsButton.addEventListener('click', ()=>{
+      if(toolMode==='screws'){ resetToolMode(); return; }
+      resetToolMode(); toolMode='screws'; screwsButton.classList.add('tool-active');
+      screwInstructionPanel.classList.remove('hidden');
+      placeAllPedicleScrews();
+      showToast('Tornillos colocados automáticamente');
+    });
+
+    rodButton.addEventListener('click', ()=>{
+      if(toolMode==='rod'){ resetToolMode(); return; }
+      resetToolMode(); toolMode='rod'; rodButton.classList.add('tool-active');
+      if(SCREWS_GROUP.children.length===0) placeAllPedicleScrews();
+      simulateCorrectionRod();
+      showToast('Barra correctora simulada');
+    });
+
+    clearCobbButton.addEventListener('click', ()=> resetToolMode(true));
+
+    saveCobbButton.addEventListener('click', ()=>{
+      if(selectedVertebrae.length===2 && currentCobbAngle>=0){
+        
+        // --- INICIO DE CORRECCIÓN ---
+        // Definir v1Name y v2Name aquí, leyendo de selectedVertebrae
+        const v1Name = selectedVertebrae[0].userData.anatomicalName;
+        const v2Name = selectedVertebrae[1].userData.anatomicalName;
+        // --- FIN DE CORRECCIÓN ---
+
+        const entry = { id: savedCobbMeasurements.length+1, v1:v1Name, v2:v2Name, angle: currentCobbAngle.toFixed(1) };
+        savedCobbMeasurements.push(entry);
+        updateCobbHistoryUI();
+        resetToolMode(true);
+        cobbInstruction.textContent = '¡Medición guardada! Seleccione las vértebras para la siguiente medición.';
+      }
+    });
+
+    function updateCobbHistoryUI(){
+      cobbMeasurementsList.innerHTML = '';
+      if(savedCobbMeasurements.length===0){
+        cobbHistoryPanel.classList.add('hidden');
+        cobbMeasurementsList.innerHTML = '<li class="text-gray-400 italic">No hay mediciones guardadas.</li>';
+        return;
+      }
+      cobbHistoryPanel.classList.remove('hidden');
+      for(const m of savedCobbMeasurements){
+        const li = document.createElement('li');
+        li.className = 'flex justify-between items-center p-2 bg-gray-700 rounded-md';
+        li.innerHTML = `<span class="font-medium text-yellow-200">Curva ${m.id} (${m.v1}-${m.v2}):</span><span class="font-extrabold text-green-400 text-xl">${m.angle}°</span>`;
+        cobbMeasurementsList.appendChild(li);
+      }
+    }
+
+    function handleCobbSelection(mesh){
+      if(selectedVertebrae.includes(mesh)){
+        selectedVertebrae.forEach(m=>{ const hex = originalColors.get(m.uuid); if(hex!==undefined) m.material.color.setHex(hex); });
+        selectedVertebrae=[]; COBB_POINTS_GROUP.clear(); cobbInstruction.textContent='Seleccione la vértebra superior y luego la inferior en el modelo 3D.'; cobbSelectedPoints.innerHTML='Punto 1: Ninguno<br/>Punto 2: Ninguno'; cobbResult.textContent='0.0°'; cobbActions.classList.add('hidden');
+        return;
+      }
+      if(!originalColors.has(mesh.uuid)) originalColors.set(mesh.uuid, mesh.material.color.getHex());
+      
+      selectedVertebrae.push(mesh); 
+      mesh.material.color.setHex(0xffa500); // Color de resaltado
+      
+      // --- INICIO DE MODIFICACIÓN ---
+      // Leer 'anatomicalName' desde userData en lugar de generar 'V' + index
+      let v1 = selectedVertebrae[0]? selectedVertebrae[0].userData.anatomicalName :'Ninguno';
+      let v2 = selectedVertebrae[1]? selectedVertebrae[1].userData.anatomicalName :'Ninguno';
+      // --- FIN DE MODIFICACIÓN ---
+      cobbSelectedPoints.innerHTML = `Punto 1: ${v1}<br/>Punto 2: ${v2}`;
+
+      if(selectedVertebrae.length===2){
+        const i1 = selectedVertebrae[0].userData.index, i2 = selectedVertebrae[1].userData.index;
+        if(i1>i2){ 
+            selectedVertebrae.reverse(); 
+            // --- INICIO DE MODIFICACIÓN ---
+            v1=selectedVertebrae[0].userData.anatomicalName; 
+            v2=selectedVertebrae[1].userData.anatomicalName; 
+            // --- FIN de MODIFICACIÓN ---
+            cobbSelectedPoints.innerHTML=`Punto 1: ${v1}<br/>Punto 2: ${v2}`; 
+        }
+        cobbInstruction.textContent='Medición lista. ¡Guarde o limpie para otra medición!';
+        cobbActions.classList.remove('hidden');
+        calculateCobbAngle();
+      } else cobbInstruction.textContent='Seleccione la vértebra inferior (Punto 2).';
+    }
+
+    // ======== Utilidades matemáticas compartidas (expuestas para tests) ========
+    // --- INICIO DE CÓDIGO RESTAURADO ---
+    function acuteAngleRad(r){
+      let d = Math.abs(r); if(d>Math.PI) d = 2*Math.PI - d; if(d>Math.PI/2) d = Math.PI - d; return d;
+    }
+    function principalDirXY(points){
+      const n = points.length; if(n<2) return new THREE.Vector2(1,0);
+      let meanX=0, meanY=0; for(const p of points){ meanX+=p.x; meanY+=p.y; }
+      meanX/=n; meanY/=n;
+      let sxx=0, sxy=0, syy=0; for(const p of points){ const dx=p.x-meanX, dy=p.y-meanY; sxx+=dx*dx; sxy+=dx*dy; syy+=dy*dy; }
+      const tr = sxx+syy; const det = sxx*syy - sxy*sxy; const disc = Math.sqrt(Math.max(0,tr*tr/4 - det));
+      const lambda = tr/2 + disc; // mayor
+      let vx = sxy, vy = lambda - sxx; if(Math.abs(vx)+Math.abs(vy) < 1e-9){ vx = 1; vy = 0; }
+      return new THREE.Vector2(vx, vy).normalize();
+    }
+
+    // Cálculo preciso del Cobb por placas terminales (PCA sobre XY)
+    function calculateCobbAngle(){
+      if(selectedVertebrae.length!==2) return;
+
+      function endplateAngle(mesh, which){
+        // Usar la geometría buffer original, no una clonada no indexada
+        const geom = mesh.geometry; 
+        const pos = geom.getAttribute('position');
+        const world = new THREE.Matrix4(); mesh.updateWorldMatrix(true,false); 
+        // --- INICIO DE CORRECCIÓN ---
+        // El método correcto es copiar la propiedad .matrixWorld
+        world.copy(mesh.matrixWorld);
+        // --- FIN DE CORRECCIÓN ---
+        const pts = [];
+        // Iterar sobre los vértices para encontrar los de la placa terminal
+        let minY=Infinity, maxY=-Infinity;
+        const tempV = new THREE.Vector3();
+        for(let i=0;i<pos.count;i++){
+            tempV.fromBufferAttribute(pos, i);
+            if(which === 'superior' && tempV.y < 0.4) continue; // Optimización: solo tomar mitad superior
+            if(which === 'inferior' && tempV.y > -0.4) continue; // Optimización: solo tomar mitad inferior
+            
+            tempV.applyMatrix4(world);
+            pts.push(tempV.clone()); // Clonar el vector transformado
+            if(tempV.y<minY) minY=tempV.y; if(tempV.y>maxY) maxY=tempV.y;
+        }
+        
+        const h = maxY - minY; 
+        if(h < 1e-6) return 0; // Evitar división por cero si la malla es plana
+        const thr = h*0.08; // 8% superior/inferior
+        
+        const band = pts.filter(p => which==='superior' ? (p.y > maxY - thr) : (p.y < minY + thr));
+        
+        if(band.length<6) {
+            console.warn(`Pocos puntos encontrados para placa ${which} en ${mesh.name}. Usando todos los puntos.`, band.length);
+            // Fallback: usar todos los puntos si el filtrado falla
+            if(pts.length < 6) return 0; // No se puede calcular
+            const proj = pts.map(p=> new THREE.Vector2(p.x, p.y));
+            const dir = principalDirXY(proj);
+            return Math.atan2(dir.y, dir.x);
+        }
+
+        const proj = band.map(p=> new THREE.Vector2(p.x, p.y));
+        const dir = principalDirXY(proj);
+        return Math.atan2(dir.y, dir.x);
+      }
+
+      const topMesh  = selectedVertebrae[0];
+      const lowMesh  = selectedVertebrae[1];
+      const angTop = endplateAngle(topMesh, 'superior');
+      const angLow = endplateAngle(lowMesh, 'inferior');
+      currentCobbAngle = THREE.MathUtils.radToDeg( acuteAngleRad( angTop - angLow ) );
+
+      // --- Dibujo de líneas guía ---
+      COBB_POINTS_GROUP.clear();
+      const lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+      const perpMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+      const len = 22, lenP = 26;
+
+      function drawLine(mesh, angle, up){
+        const bb = new THREE.Box3().setFromObject(mesh);
+        const center = bb.getCenter(new THREE.Vector3());
+        const y = up ? (bb.max.y + 0.1) : (bb.min.y - 0.1);
+        const geomP = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(-len/2,0,0), new THREE.Vector3(len/2,0,0)
+        ]);
+        const L = new THREE.Line(geomP, lineMaterial); L.position.set(center.x, y, center.z); L.rotation.z = angle; COBB_POINTS_GROUP.add(L);
+        const geomPerp = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0,-lenP/2,0), new THREE.Vector3(0,lenP/2,0)
+        ]);
+        const P = new THREE.Line(geomPerp, perpMaterial); P.position.copy(L.position); P.rotation.z = angle + Math.PI/2; COBB_POINTS_GROUP.add(P);
+      }
+      drawLine(topMesh, angTop, true);
+      drawLine(lowMesh, angLow, false);
+
+      cobbResult.textContent = `${currentCobbAngle.toFixed(1)}°`;
+    }
+    // --- FIN DE CÓDIGO RESTAURADO ---
+
+    // --- INICIO DE CÓDIGO RESTAURADO (PARA FIJAR 'END OF INPUT') ---
+    function placeAllPedicleScrews(){
+      SCREWS_GROUP.clear();
+      spineGroup.children.forEach(child=>{
+        if(child.isGroup && child.children.length>0){
+          const body = child.children.find(m=>m.isMesh && m.name.startsWith('VertebraBody_'));
+          if(!body) return;
+          const parent = body.parent; const center = new THREE.Vector3(); body.getWorldPosition(center);
+          const radius = body.geometry.parameters?.radiusTop || body.geometry.parameters?.radius || 1.0;
+          const posterior = -radius*0.5; const lateral = radius*0.8;
+          const Llocal = new THREE.Vector3(-lateral, 0, posterior); const Rlocal = new THREE.Vector3(lateral, 0, posterior);
+          const L = Llocal.clone().applyMatrix4(parent.matrixWorld), R = Rlocal.clone().applyMatrix4(parent.matrixWorld);
+          const screwL = new THREE.Mesh(screwGeometry, screwMaterial); screwL.position.copy(L);
+          screwL.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, L).normalize()));
+          const screwR = new THREE.Mesh(screwGeometry, screwMaterial); screwR.position.copy(R);
+          screwR.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, R).normalize()));
+          SCREWS_GROUP.add(screwL, screwR);
+        }
+      });
+      if(!scene.children.includes(SCREWS_GROUP)) scene.add(SCREWS_GROUP);
+    }
+
+    function simulateCorrectionRod(){
+      RODS_GROUP.clear();
+      if(SCREWS_GROUP.children.length<4) return;
+      const leftScrews = SCREWS_GROUP.children.filter((_,idx)=> idx%2===0);
+      const worldPos = leftScrews.map(m=>{ const v=new THREE.Vector3(); m.getWorldPosition(v); return {m, y:v.y, v}; }).sort((a,b)=>b.y-a.y);
+      const points = worldPos.map(o=>o.v);
+      const curve = new THREE.CatmullRomCurve3(points, false, 'catmullrom', 0.1);
+      const tube = new THREE.TubeGeometry(curve, Math.max(20, points.length*3), 0.15, 8, false);
+      const rodMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.9, roughness: 0.2 });
+      const rod = new THREE.Mesh(tube, rodMat);
+      RODS_GROUP.add(rod);
+      if(!scene.children.includes(RODS_GROUP)) scene.add(RODS_GROUP);
+    }
+
+    // ---------- Exportación ----------
+    exportButton.addEventListener('click', ()=>{
+      const payload = buildExportPayload();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `plan_gemelo_digital_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      canvas.toBlob((png)=>{
+        if(!png) return; const a2 = document.createElement('a'); a2.href = URL.createObjectURL(png); a2.download = 'vista_3D.png'; a2.click(); URL.revokeObjectURL(a2.href);
+      }, 'image/png');
+      showToast('Plan exportado (JSON + PNG)');
+    });
+
+    function buildExportPayload(){
+      const screws = SCREWS_GROUP.children.map((m,idx)=>{
+        const p = new THREE.Vector3(); m.getWorldPosition(p);
+        const q = new THREE.Quaternion(); m.getWorldQuaternion(q);
+        return { id: idx+1, position:{x:p.x,y:p.y,z:p.z}, quaternion:{x:q.x,y:q.y,z:q.z,w:q.w} };
+      });
+      const cobb = savedCobbMeasurements.slice();
+      return {
+        app: 'Gemelo Digital (demo) - Escoliosis',
+        timestamp: new Date().toISOString(),
+        patientImage: fileNameEl.textContent || null,
+        cobbMeasurements: cobb,
+        screwCount: screws.length,
+        screws,
+        notes: 'Datos generados con fines demostrativos. No usar para diagnóstico.'
+      };
+    }
+
+    // ---------- Atajos de teclado ----------
+    document.addEventListener('keydown', (e)=>{
+      if(e.target && ['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+      const k = e.key.toLowerCase();
+      if(k==='c') cobbButton.click();
+      if(k==='s') screwsButton.click();
+      if(k==='r') { resetToolMode(); showToast('Herramientas reiniciadas'); }
+      if(k==='e' && !exportButton.disabled) exportButton.click();
+    });
+
+    // ========== TESTS BÁSICOS (auto) ==========
+    function runSelfTests(){
+      try{
+        console.group('%cSelfTests Gemelo Digital','color:#a7f3d0');
+        // Test 1: acuteAngleRad
+        const d1 = acuteAngleRad(THREE.MathUtils.degToRad(170));
+        console.assert(Math.abs(THREE.MathUtils.radToDeg(d1)-10)<1e-6, 'acuteAngleRad falla para 170°');
+
+        // Test 2: principalDirXY con línea 45°
+        const pts = Array.from({length:20}, (_,i)=> new THREE.Vector2(i, i));
+        const dir = principalDirXY(pts); const ang = Math.atan2(dir.y, dir.x);
+        console.assert(Math.abs(THREE.MathUtils.radToDeg(ang)-45)<0.5, 'PCA 2D falla para línea 45°');
+
+        console.groupEnd();
+      }catch(err){
+        console.error('SelfTests error:', err);
+        showToast('⚠️ Fallaron tests internos. Ver consola.');
+      }
+    }
+
+    // Inicializar historial y tests en carga
+    document.addEventListener('DOMContentLoaded', ()=>{ updateCobbHistoryUI(); runSelfTests(); });
+  </script>
+</body>
+</html>
