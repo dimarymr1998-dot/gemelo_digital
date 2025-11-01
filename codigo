@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gemelo Digital - Planificación de Escoliosis (Mejorado)</title>
+  <title>Gemelo Digital - Planificación de Escoliosis (Doble Vista)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script type="importmap">
     {
@@ -14,28 +14,32 @@
     }
   </script>
   <style>
-    /* MODIFICADO: Canvas 3D oculto por defecto */
     #digital-twin-canvas { width: 100%; height: 100%; min-height: 520px; border-radius: 0.5rem; background:#111827; display: none; }
     input[type="file"] { display:none; }
     .custom-file-upload { display:inline-block; padding:0.75rem 1.25rem; cursor:pointer; background:#4f46e5; color:#fff; border-radius:0.5rem; font-weight:600; transition:background .3s; }
     .custom-file-upload:hover { background:#4338ca; }
+    
+    /* Clase genérica para botones activos */
     .tool-active { box-shadow:0 0 0 3px #10b981; background:#059669 !important; }
+    /* NUEVO: Clase específica para botones de trazador */
+    .plotter-button.tool-active { background: #4f46e5; box-shadow: 0 0 0 3px #a5b4fc; }
+
     .kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     
-    /* NUEVO: Estilos para el trazador 2D */
     #image-plotter-svg { cursor: crosshair; }
     #image-plotter-svg circle { transition: all 0.1s ease; }
     #image-plotter-svg circle:hover { r: 8px; fill-opacity: 0.8; }
+
+    /* Estilo para dropzone */
+    /* Eliminadas las reglas para .dropzone y .dropzone.dragover */
   </style>
 </head>
 <body class="bg-gray-900 text-gray-200 font-sans antialiased">
-  <!-- Header -->
-  <header class="bg-gray-800 shadow-lg">
-    <!-- ... (sin cambios) ... -->
+  <!-- Header --><header class="bg-gray-800 shadow-lg">
     <div class="container mx-auto px-6 py-4 flex items-center justify-between">
       <div>
         <h1 class="text-2xl font-bold text-white">Plataforma de Gemelo Digital</h1>
-        <h2 class="text-lg text-indigo-300">Planificación prequirúrgica de escoliosis</h2>
+        <h2 class="text-lg text-indigo-300">Planificación prequirúrgica de escoliosis (AP + LAT)</h2>
       </div>
       <div class="hidden lg:flex gap-2 text-sm text-gray-300">
         <div class="px-2 py-1 rounded bg-gray-700"><span class="kbd">C</span> Cobb</div>
@@ -46,49 +50,58 @@
     </div>
   </header>
 
-  <!-- MODIFICADO: Layout principal (cols-3 a cols-4) -->
-  <main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
-    <!-- Sidebar -->
-    <aside class="lg:col-span-1 bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col gap-6">
-      <section>
-        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">1. Cargar imagen</h3>
-        <label for="file-upload" class="custom-file-upload">Seleccionar archivo (JPG/PNG)…</label>
-        <input id="file-upload" type="file" accept="image/jpeg,image/png" />
-        <p id="file-name" class="text-gray-400 text-sm mt-3">Ningún archivo seleccionado.</p>
-        <div id="dropzone" class="mt-3 p-4 rounded-lg border border-dashed border-gray-600 text-gray-300 text-sm">
-          Arrastra y suelta aquí la imagen del paciente
-        </div>
+  <!-- Layout principal (cols-4) --><main class="container mx-auto p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- Sidebar --><aside class="lg:col-span-1 bg-gray-800 p-6 rounded-lg shadow-xl flex flex-col gap-6">
+      
+      <!-- MODIFICADO: Sección de Carga de Imágenes (Doble) --><section>
+        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">1. Cargar Imágenes</h3>
+        
+        <!-- Carga AP --><div class="mb-4">
+          <label for="file-upload-ap" class="custom-file-upload w-full text-center">Img. AP (Frente)…</label>
+          <input id="file-upload-ap" type="file" accept="image/jpeg,image/png" />
+          <p id="file-name-ap" class="text-gray-400 text-sm mt-3">Ningún archivo AP seleccionado.</p>
+          <!-- <div id="dropzone-ap" class="dropzone"> ... </div> --><!-- Elemento eliminado --></div>
+
+        <!-- Carga Lateral --><div>
+          <label for="file-upload-lat" class="custom-file-upload w-full text-center bg-indigo-700 hover:bg-indigo-800">Img. Lateral (Lado)…</label>
+          <input id="file-upload-lat" type="file" accept="image/jpeg,image/png" />
+          <p id="file-name-lat" class="text-gray-400 text-sm mt-3">Ningún archivo LAT seleccionado.</p>
+          <!-- <div id="dropzone-lat" class="dropzone"> ... </div> --><!-- Elemento eliminado --></div>
       </section>
 
-      <!-- ELIMINADO: Sección de previsualización 2D (movida al visor principal) -->
+      <!-- Sección de Trazado de Curva (Modificada) --><section id="plotting-section" class="hidden">
+        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">2. Trazar Curvas 2D</h3>
+        
+        <!-- Botones de modo de trazado --><div class="grid grid-cols-2 gap-2 mb-3">
+          <button id="btn-trace-ap" class="plotter-button w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg transition">Trazar AP (Coronal)</button>
+          <button id="btn-trace-lat" class="plotter-button w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-3 rounded-lg transition disabled:opacity-50" disabled>Trazar LAT (Sagital)</button>
+        </div>
 
-      <!-- NUEVO: Sección de Trazado de Curva -->
-      <section id="plotting-section" class="hidden">
-        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">2. Trazar Curva 2D</h3>
         <p class="text-sm text-gray-300 mb-3">Haga clic en la imagen (derecha) para marcar el centro de cada vértebra, de arriba hacia abajo.</p>
-        <p id="plot-point-count" class="text-lg font-medium text-yellow-300 mb-4">Puntos trazados: 0</p>
+        
+        <!-- Conteo de puntos --><div id="plot-point-count" class="text-lg font-medium text-yellow-300 mb-4">
+          <div>Puntos AP (Verdes): 0</div>
+          <div>Puntos LAT (Azules): 0</div>
+        </div>
+
         <div class="flex flex-col gap-3">
           <button id="generate-3d-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Generar Modelo 3D</button>
-          <button id="clear-plot-btn" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-3 rounded-lg transition">Limpiar Puntos</button>
+          <button id="clear-plot-btn" class="w-full bg-gray-600 hover:bg-gray-500 text-white font-semibold py-2 px-3 rounded-lg transition">Limpiar Puntos (Vista Activa)</button>
         </div>
       </section>
 
       <section>
-        <!-- MODIFICADO: Paso 2 a 3 -->
-        <h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">3. Herramientas de planificación</h3>
+        <!-- Paso 3 --><h3 class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">3. Herramientas de planificación</h3>
         <div id="tools-panel" class="flex flex-col gap-3 opacity-50 cursor-not-allowed">
-          <!-- ... (botones sin cambios) ... -->
-          <button id="tool-cobb" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Medir ángulo de Cobb</button>
+          <!-- (Botones sin cambios) --><button id="tool-cobb" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Medir ángulo de Cobb</button>
           <button id="tool-screws" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Colocar Tornillos (Interactivo)</button>
           <button id="tool-rod" class="tool-button w-full text-left bg-gray-700 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition disabled:opacity-50" disabled>Simular corrección con barra</button>
         </div>
 
-        <!-- ... (paneles de herramientas sin cambios) ... -->
-        <div id="screw-instruction-panel" class="hidden mt-3 bg-gray-700/60 text-gray-200 p-3 rounded-md text-sm">
+        <!-- (Paneles de herramientas sin cambios) --><div id="screw-instruction-panel" class="hidden mt-3 bg-gray-700/60 text-gray-200 p-3 rounded-md text-sm">
           <b>Modo Tornillos Activo:</b> Haga clic en una vértebra (ej. T7, L2) para colocar/quitar un par de tornillos pediculares.
         </div>
         <div id="cobb-results-panel" class="hidden mt-6 p-4 bg-gray-700 rounded-lg">
-          <!-- ... -->
           <h4 class="text-lg font-bold text-green-300 mb-2">Análisis de ángulo de Cobb</h4>
           <p id="cobb-instruction" class="text-sm text-gray-300 mb-2">Seleccione 3 puntos en la placa superior de la vértebra superior.</p>
           <div id="cobb-selected-points" class="text-sm text-yellow-300">Puntos placa superior: 0/3<br/>Puntos placa inferior: 0/3</div>
@@ -99,7 +112,6 @@
           </div>
         </div>
         <div id="cobb-history-panel" class="mt-6 p-4 bg-gray-800 rounded-lg border border-gray-700 hidden">
-          <!-- ... -->
            <h4 class="text-lg font-bold text-indigo-300 mb-3 border-b border-gray-700 pb-2">Mediciones guardadas</h4>
           <ul id="cobb-measurements-list" class="space-y-2">
             <li class="text-gray-400 italic">No hay mediciones guardadas.</li>
@@ -110,26 +122,20 @@
       </section>
     </aside>
 
-    <!-- MODIFICADO: Canvas (col-span-2 a col-span-3) -->
-    <section class="lg:col-span-3 bg-gray-800 p-6 rounded-lg shadow-xl">
-      <!-- MODIFICADO: Paso 3 a 4 -->
+    <!-- Canvas (col-span-3) --><section class="lg:col-span-3 bg-gray-800 p-6 rounded-lg shadow-xl">
       <h3 id="main-viewer-title" class="text-xl font-semibold mb-4 border-b border-gray-700 pb-2">Visor Principal</h3>
       <div id="canvas-container" class="relative w-full h-[520px] lg:h-[620px] bg-gray-900 rounded-lg overflow-hidden">
         <div id="loading-message" class="absolute inset-0 flex flex-col items-center justify-center z-10">
           <svg id="initial-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-600"><path d="M5 12s2.545-5 7-5c4.454 0 7 5 7 5s-2.546 5-7 5c-4.455 0-7-5-7-5z"/><path d="M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/><path d="M2 12s2.946-8 10-8 10 8 10 8-2.946 8-10 8S2 12 2 12z"/></svg>
-          <p id="loading-text" class="text-gray-500 text-lg mt-4">Cargue una imagen para iniciar la planificación.</p>
+          <p id="loading-text" class="text-gray-500 text-lg mt-4">Cargue una imagen AP y LAT para iniciar.</p>
         </div>
         
-        <!-- NUEVO: Contenedor para el trazado 2D -->
-        <div id="image-plotter-container" class="absolute inset-0 z-20 hidden bg-gray-900">
+        <!-- Contenedor para el trazado 2D --><div id="image-plotter-container" class="absolute inset-0 z-20 hidden bg-gray-900">
           <img id="image-plotter-preview" src="#" alt="Trazador 2D" class="w-full h-full object-contain" />
           <svg id="image-plotter-svg" class="absolute inset-0 w-full h-full"></svg>
         </div>
 
-        <canvas id="digital-twin-canvas"></canvas> <!-- Estilo 'display: none' añadido en <style> -->
-        
-        <!-- Toast -->
-        <div id="toast" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-4 py-2 rounded-full"></div>
+        <canvas id="digital-twin-canvas"></canvas> <!-- display: none --><!-- Toast --><div id="toast" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/70 text-white text-sm px-4 py-2 rounded-full"></div>
       </div>
     </section>
   </main>
@@ -140,11 +146,9 @@
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
     import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    // ... (SubdivisionModifier se cargará dinámicamente) ...
     // ... (loadSubdivisionModifier sin cambios) ...
     let SubdivisionModifierSafe = null;
     async function loadSubdivisionModifier(){
-    // ... (sin cambios) ...
       if(SubdivisionModifierSafe) return SubdivisionModifierSafe;
       try{
         const mod = await import('three/addons/modifiers/SubdivisionModifier.js');
@@ -160,10 +164,6 @@
     let scene, camera, renderer, controls, spineGroup;
     const canvas = document.getElementById('digital-twin-canvas');
     const canvasContainer = document.getElementById('canvas-container');
-    const fileUpload = document.getElementById('file-upload');
-    const dropzone = document.getElementById('dropzone');
-    const fileNameEl = document.getElementById('file-name');
-    // ELIMINADO: imagePreview, previewSection
     const loadingMessage = document.getElementById('loading-message');
     const loadingText = document.getElementById('loading-text');
     const initialIcon = document.getElementById('initial-icon');
@@ -171,60 +171,72 @@
     const toast = document.getElementById('toast');
     const mainViewerTitle = document.getElementById('main-viewer-title');
 
-    // NUEVO: Estado y refs para el Trazador 2D
-    let patientSpinePoints2D = []; // Almacena {x, y} en coordenadas de SVG
+    // --- NUEVO: Estado de Carga y Trazado 2D (Doble) ---
+    let imageDataAP = null;
+    let imageDataLAT = null;
+    let patientSpinePoints2D_AP = []; // Almacena {x, y} en coordenadas de SVG (Coronal)
+    let patientSpinePoints2D_LAT = []; // Almacena {x, y} en coordenadas de SVG (Sagital)
+    let currentTracingMode = 'AP'; // 'AP' | 'LAT'
+
+    // DOM Refs Trazador
+    const fileUploadAP = document.getElementById('file-upload-ap');
+    const fileUploadLAT = document.getElementById('file-upload-lat');
+    // const dropzoneAP = document.getElementById('dropzone-ap'); // Eliminado
+    // const dropzoneLAT = document.getElementById('dropzone-lat'); // Eliminado
+    const fileNameElAP = document.getElementById('file-name-ap');
+    const fileNameElLAT = document.getElementById('file-name-lat');
+    
     const plottingSection = document.getElementById('plotting-section');
+    const btnTraceAP = document.getElementById('btn-trace-ap');
+    const btnTraceLAT = document.getElementById('btn-trace-lat');
     const plotPointCount = document.getElementById('plot-point-count');
     const generate3dBtn = document.getElementById('generate-3d-btn');
     const clearPlotBtn = document.getElementById('clear-plot-btn');
+    
     const imagePlotterContainer = document.getElementById('image-plotter-container');
     const imagePlotterPreview = document.getElementById('image-plotter-preview');
     const imagePlotterSvg = document.getElementById('image-plotter-svg');
-
+    // --- FIN DE NUEVO ESTADO ---
 
     let toolMode = null; // null | 'cobb' | 'screws' | 'rod'
 
-    // ... (Estado de Cobb, Screws, Rods sin cambios) ...
-    // Cobb
+    // Estado de Herramientas (sin cambios)
     let cobbClickPoints = []; 
-    // ...
     let currentCobbAngle = 0.0;
     const COBB_POINTS_GROUP = new THREE.Group();
     let savedCobbMeasurements = [];
-    // Screws
     const SCREWS_GROUP = new THREE.Group();
-    // ...
     const screwMaterial = new THREE.MeshStandardMaterial({ color: 0xFFA500, metalness: 0.8, roughness: 0.2 });
     const screwGeometry = new THREE.CylinderGeometry(0.1, 0.1, 3.5, 8);
     screwGeometry.translate(0, 1.75, 0);
-    // Rods (barra correctora)
     const RODS_GROUP = new THREE.Group();
 
-    // ... (DOM refs de herramientas sin cambios) ...
-    // DOM refs
+    // DOM refs Herramientas (sin cambios)
     const cobbButton = document.getElementById('tool-cobb');
     const screwsButton = document.getElementById('tool-screws');
     const rodButton = document.getElementById('tool-rod');
     const cobbResultsPanel = document.getElementById('cobb-results-panel');
+    
+    /* INICIO DE LA CORRECCIÓN: Definiciones de variables de Cobb */
     const cobbInstruction = document.getElementById('cobb-instruction');
     const cobbSelectedPoints = document.getElementById('cobb-selected-points');
     const cobbResult = document.getElementById('cobb-result');
     const cobbActions = document.getElementById('cobb-actions');
     const saveCobbButton = document.getElementById('save-cobb');
-    const clearCobbButton = document.getElementById('clear-cobb');
+    const clearCobbButton = document.getElementById('clear-cobb'); // <-- Esta era la variable que faltaba
     const cobbHistoryPanel = document.getElementById('cobb-history-panel');
     const cobbMeasurementsList = document.getElementById('cobb-measurements-list');
+    /* FIN DE LA CORRECCIÓN */
+
     const screwInstructionPanel = document.getElementById('screw-instruction-panel');
-    // ...
     const exportButton = document.getElementById('tool-export');
 
-    // Raycaster
+    // Raycaster (sin cambios)
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
-    // ---------- Utilidades UI ----------
+    // ---------- Utilidades UI (sin cambios) ----------
     function showToast(msg, timeout = 1800) {
-    // ... (sin cambios) ...
       toast.textContent = msg;
       toast.classList.remove('hidden');
       clearTimeout(showToast._t);
@@ -232,125 +244,182 @@
     }
 
     function enableTools() {
-    // ... (sin cambios) ...
       toolsPanel.classList.remove('opacity-50', 'cursor-not-allowed');
       toolsPanel.querySelectorAll('.tool-button').forEach(btn => btn.disabled = false);
       exportButton.disabled = false;
     }
 
-    // ---------- Carga de imagen ----------
-    fileUpload.addEventListener('change', (e) => handleFile(e.target.files?.[0]));
-    // ... (Listeners de dropzone sin cambios) ...
-    ;['dragenter','dragover'].forEach(evt=>dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.add('bg-gray-700/40');}));
-    ;['dragleave','drop'].forEach(evt=>dropzone.addEventListener(evt, e=>{e.preventDefault(); dropzone.classList.remove('bg-gray-700/40');}));
-    dropzone.addEventListener('drop', (e)=>{
-      const file = e.dataTransfer?.files?.[0];
-      if(file) handleFile(file);
-    });
+    // ---------- NUEVO: Carga de imagen (Doble) ----------
+    
+    // Listeners para AP
+    fileUploadAP.addEventListener('change', (e) => handleFile(e.target.files?.[0], 'AP'));
+    // setupDropzone(dropzoneAP, 'AP'); // Eliminado
 
-    function handleFile(file){
+    // Listeners para LAT
+    fileUploadLAT.addEventListener('change', (e) => handleFile(e.target.files?.[0], 'LAT'));
+    // setupDropzone(dropzoneLAT, 'LAT'); // Eliminado
+
+    /* La función setupDropzone completa fue eliminada */
+
+    function handleFile(file, mode) {
       if(!file) return;
       if(!/^image\/(jpeg|png)$/.test(file.type)) { showToast('Formato no soportado. Use JPG o PNG.'); return; }
+      
+      const fileNameEl = (mode === 'AP') ? fileNameElAP : fileNameElLAT;
       fileNameEl.textContent = file.name;
+
       const reader = new FileReader();
       reader.onload = (ev)=>{
-        // MODIFICADO: Mostrar en el trazador 2D, no en la previsualización
-        imagePlotterPreview.src = ev.target?.result;
-        imagePlotterContainer.classList.remove('hidden'); // Mostrar trazador
-        plottingSection.classList.remove('hidden'); // Mostrar "Paso 2"
-        loadingMessage.classList.add('hidden'); // Ocultar mensaje "Cargue imagen"
-        mainViewerTitle.textContent = "2. Trazar Curva 2D";
+        if (mode === 'AP') {
+          imageDataAP = ev.target?.result;
+        } else {
+          imageDataLAT = ev.target?.result;
+          btnTraceLAT.disabled = false; // Habilitar botón de trazado LAT
+        }
+
+        // Mostrar sección de trazado si no estaba visible
+        plottingSection.classList.remove('hidden');
         
-        // Limpiar estado anterior
-        onClearPlot();
+        // Si es la primera imagen cargada (o AP), establecerla como activa
+        if (mode === 'AP' || !imageDataAP) {
+          setTracingMode('AP');
+        }
+
+        // Ocultar mensaje inicial "Cargue imagen"
+        loadingMessage.classList.add('hidden'); 
+        
+        // Limpiar estado 3D anterior si existe
+        resetTo2DPlotting();
+      };
+      reader.readAsDataURL(file);
+    }
+    
+    /**
+     * Resetea el estado de vuelta al trazador 2D (cuando se carga una nueva imagen)
+     */
+    function resetTo2DPlotting() {
+        // Limpiar estado anterior 3D
         resetToolMode();
         canvas.style.display = 'none';
         toolsPanel.classList.add('opacity-50', 'cursor-not-allowed');
         toolsPanel.querySelectorAll('.tool-button').forEach(btn => btn.disabled = true);
         exportButton.disabled = true;
-      };
-      reader.readAsDataURL(file);
-      // ELIMINADO: simulateDigitalTwinGeneration(); // Ya no se genera automáticamente
+
+        // Mostrar el trazador (si el modo actual tiene una imagen)
+        const currentImage = (currentTracingMode === 'AP') ? imageDataAP : imageDataLAT;
+        if (currentImage) {
+          imagePlotterContainer.classList.remove('hidden');
+        }
     }
 
-    // ---------- NUEVAS FUNCIONES: Trazador 2D ----------
+    // ---------- NUEVO: Funciones Trazador 2D (Modo Dual) ----------
+
+    // Listeners para botones de modo
+    btnTraceAP.addEventListener('click', () => setTracingMode('AP'));
+    btnTraceLAT.addEventListener('click', () => setTracingMode('LAT'));
+    
+    /**
+     * Establece el modo de trazado actual (AP o LAT).
+     */
+    function setTracingMode(mode) {
+      if (mode === 'AP' && !imageDataAP) {
+        showToast('Cargue una imagen AP primero.');
+        return;
+      }
+      if (mode === 'LAT' && !imageDataLAT) {
+        showToast('Cargue una imagen LAT primero.');
+        return;
+      }
+      
+      currentTracingMode = mode;
+      
+      // Actualizar botones
+      btnTraceAP.classList.toggle('tool-active', mode === 'AP');
+      btnTraceLAT.classList.toggle('tool-active', mode === 'LAT');
+      
+      // Actualizar imagen de preview
+      imagePlotterPreview.src = (mode === 'AP') ? imageDataAP : imageDataLAT;
+      imagePlotterContainer.classList.remove('hidden');
+      
+      // Actualizar título
+      mainViewerTitle.textContent = `2. Trazar Curva 2D (${mode})`;
+      
+      // Redibujar SVG para el modo actual
+      updatePlotterSVG();
+    }
     
     /**
      * Maneja el clic en el SVG del trazador 2D.
      */
     function onPlotterClick(event) {
       const rect = imagePlotterSvg.getBoundingClientRect();
-      // Ajustar coordenadas al tamaño real de la imagen (si está 'contained')
       const img = imagePlotterPreview;
       const svg = imagePlotterSvg;
 
+      // Calcular escala y offset (lógica sin cambios)
       const realW = img.naturalWidth;
       const realH = img.naturalHeight;
       const aspectImg = realW / realH;
       const aspectSvg = svg.clientWidth / svg.clientHeight;
-
       let scale = 1.0, offsetX = 0, offsetY = 0;
-
       if (aspectImg > aspectSvg) {
-        // Imagen más ancha que el contenedor (limitada por ancho)
         scale = svg.clientWidth / realW;
         offsetY = (svg.clientHeight - (realH * scale)) / 2;
       } else {
-        // Imagen más alta que el contenedor (limitada por alto)
         scale = svg.clientHeight / realH;
         offsetX = (svg.clientWidth - (realW * scale)) / 2;
       }
       
-      // Coordenadas del clic relativo al SVG
       const svgX = event.clientX - rect.left;
       const svgY = event.clientY - rect.top;
-
-      // Convertir a coordenadas de píxel de imagen (0,0 arriba-izquierda)
       const imgX = (svgX - offsetX) / scale;
       const imgY = (svgY - offsetY) / scale;
 
-      // Ignorar clics fuera de la imagen
       if (svgX < offsetX || svgY < offsetY || imgX > realW || imgY > realH) {
         showToast("Clic fuera de la imagen.");
         return;
       }
 
-      // Almacenar coordenadas relativas al SVG (más fácil para dibujar)
-      patientSpinePoints2D.push({ x: svgX, y: svgY });
-      updatePlotterSVG();
+      // Añadir al array de puntos correcto
+      const pointsArray = (currentTracingMode === 'AP') ? patientSpinePoints2D_AP : patientSpinePoints2D_LAT;
+      pointsArray.push({ x: svgX, y: svgY });
       
-      plotPointCount.textContent = `Puntos trazados: ${patientSpinePoints2D.length}`;
-      generate3dBtn.disabled = patientSpinePoints2D.length < 2;
+      updatePlotterSVG();
+      updatePlotCounts();
     }
 
     /**
-     * Dibuja los puntos y líneas en el SVG del trazador.
+     * Dibuja los puntos y líneas en el SVG del trazador (para el modo actual).
      */
     function updatePlotterSVG() {
       imagePlotterSvg.innerHTML = ''; // Limpiar SVG
-      if (patientSpinePoints2D.length === 0) return;
+      
+      const pointsArray = (currentTracingMode === 'AP') ? patientSpinePoints2D_AP : patientSpinePoints2D_LAT;
+      const pointColor = (currentTracingMode === 'AP') ? "#00ff00" : "#00aaff"; // Verde para AP, Azul para LAT
+      const lineColor = (currentTracingMode === 'AP') ? "#a3e635" : "#60a5fa"; // Lima para AP, Azul claro para LAT
+
+      if (pointsArray.length === 0) return;
 
       const ns = "http://www.w3.org/2000/svg";
       
       // Dibujar líneas
-      if (patientSpinePoints2D.length > 1) {
-        const pathData = "M" + patientSpinePoints2D.map(p => `${p.x},${p.y}`).join(" L");
+      if (pointsArray.length > 1) {
         const polyline = document.createElementNS(ns, "polyline");
-        polyline.setAttribute("points", patientSpinePoints2D.map(p => `${p.x},${p.y}`).join(" "));
+        polyline.setAttribute("points", pointsArray.map(p => `${p.x},${p.y}`).join(" "));
         polyline.setAttribute("fill", "none");
-        polyline.setAttribute("stroke", "#fde047"); // Amarillo
+        polyline.setAttribute("stroke", lineColor);
         polyline.setAttribute("stroke-width", "3");
         polyline.setAttribute("stroke-dasharray", "4 4");
         imagePlotterSvg.appendChild(polyline);
       }
 
       // Dibujar puntos
-      patientSpinePoints2D.forEach(p => {
+      pointsArray.forEach(p => {
         const circle = document.createElementNS(ns, "circle");
         circle.setAttribute("cx", p.x);
         circle.setAttribute("cy", p.y);
         circle.setAttribute("r", "5");
-        circle.setAttribute("fill", "#00ff00"); // Verde
+        circle.setAttribute("fill", pointColor);
         circle.setAttribute("stroke", "#ffffff");
         circle.setAttribute("stroke-width", "1.5");
         imagePlotterSvg.appendChild(circle);
@@ -358,49 +427,65 @@
     }
 
     /**
-     * Limpia los puntos del trazador 2D.
+     * Limpia los puntos del trazador 2D (para el modo actual).
      */
     function onClearPlot() {
-      patientSpinePoints2D = [];
+      if (currentTracingMode === 'AP') {
+        patientSpinePoints2D_AP = [];
+      } else {
+        patientSpinePoints2D_LAT = [];
+      }
       updatePlotterSVG();
-      plotPointCount.textContent = `Puntos trazados: 0`;
-      generate3dBtn.disabled = true;
+      updatePlotCounts();
+    }
+    
+    /**
+     * Actualiza el contador de puntos y habilita/deshabilita el botón 3D.
+     */
+    function updatePlotCounts() {
+      plotPointCount.innerHTML = `
+        <div>Puntos AP (Verdes): ${patientSpinePoints2D_AP.length}</div>
+        <div>Puntos LAT (Azules): ${patientSpinePoints2D_LAT.length}</div>
+      `;
+      // Habilitar botón 3D solo si AMBAS curvas tienen puntos
+      const canGenerate = patientSpinePoints2D_AP.length >= 2 && patientSpinePoints2D_LAT.length >= 2;
+      generate3dBtn.disabled = !canGenerate;
     }
 
     /**
      * Inicia la generación 3D basada en los puntos 2D.
      */
     function onGenerate3D() {
-      if (patientSpinePoints2D.length < 2) return;
+      if (patientSpinePoints2D_AP.length < 2 || patientSpinePoints2D_LAT.length < 2) return;
 
       // Ocultar UI 2D
       imagePlotterContainer.classList.add('hidden');
-      plottingSection.classList.add('hidden');
-      mainViewerTitle.textContent = "4. Gemelo Digital 3D"; // Título actualizado
+      // plottingSection.classList.add('hidden'); // Opcional: mantener visible
+      mainViewerTitle.textContent = "4. Gemelo Digital 3D (AP + LAT)";
 
       // Mostrar UI 3D
       canvas.style.display = 'block';
       
       // Iniciar simulación
-      simulateDigitalTwinGeneration(patientSpinePoints2D);
+      simulateDigitalTwinGeneration(patientSpinePoints2D_AP, patientSpinePoints2D_LAT);
     }
     
-    // Añadir listeners de los nuevos botones
+    // Añadir listeners de los botones
     imagePlotterSvg.addEventListener('click', onPlotterClick);
     generate3dBtn.addEventListener('click', onGenerate3D);
     clearPlotBtn.addEventListener('click', onClearPlot);
 
     // ---------- Simulación de procesamiento ----------
-    // MODIFICADO: Acepta puntos 2D
-    function simulateDigitalTwinGeneration(points2D = null){
-      loadingText.textContent = 'Analizando puntos clave… construyendo modelo anatómico 3D…';
+    // MODIFICADO: Acepta puntos AP y LAT
+    function simulateDigitalTwinGeneration(points2D_AP = null, points2D_LAT = null){
+      loadingText.textContent = 'Analizando curvas AP/LAT… construyendo modelo anatómico 3D…';
       initialIcon.classList.add('hidden');
       loadingMessage.classList.remove('hidden'); // Mostrar carga
       savedCobbMeasurements = [];
       updateCobbHistoryUI();
       resetToolMode();
 
-      // Limpiar escena previa con liberación segura de recursos
+      // Limpiar escena previa
       if(scene){
         scene.remove(spineGroup, COBB_POINTS_GROUP, SCREWS_GROUP, RODS_GROUP);
         disposeObject(spineGroup);
@@ -411,19 +496,19 @@
 
       setTimeout(()=>{
         loadingMessage.classList.add('hidden');
-        if(!renderer) initThreeJS(points2D); // Pasar puntos
+        if(!renderer) initThreeJS(points2D_AP, points2D_LAT); // Pasar puntos
         else {
-          spineGroup = createScolioticSpine(points2D); // Pasar puntos
+          spineGroup = createScolioticSpine(points2D_AP, points2D_LAT); // Pasar puntos
           scene.add(spineGroup, COBB_POINTS_GROUP, SCREWS_GROUP, RODS_GROUP);
         }
         enableTools();
         canvas.addEventListener('mousedown', onCanvasMouseDown, false);
-        showToast('Gemelo digital generado');
+        showToast('Gemelo digital AP/LAT generado');
       }, 1200);
     }
 
     function disposeObject(obj){
-    // ... (sin cambios) ...
+      // ... (sin cambios) ...
       if(!obj) return;
       obj.traverse((child)=>{
         if(child.isMesh){
@@ -437,8 +522,8 @@
     }
 
     // ---------- Inicializar Three.js ----------
-    // MODIFICADO: Acepta puntos 2D
-    function initThreeJS(points2D = null){
+    // MODIFICADO: Acepta puntos AP y LAT
+    function initThreeJS(points2D_AP = null, points2D_LAT = null){
       scene = new THREE.Scene();
       scene.background = new THREE.Color(0x1a202c);
 
@@ -447,14 +532,19 @@
       camera.position.set(20, 10, 30);
       camera.lookAt(0, 10, 0);
 
-      renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+      renderer = new THREE.WebGLRenderer({ canvas, antialiias:true, powerPreference:'high-performance' });
       const DPR = Math.min(window.devicePixelRatio || 1, 2);
       renderer.setPixelRatio(DPR);
       renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
 
       const pmrem = new THREE.PMREMGenerator(renderer);
       
-      // MODIFICADO: Añadido .onError para fallback de iluminación
+      const ambientLight = new THREE.AmbientLight(0x606060);
+      scene.add(ambientLight);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.5); 
+      dirLight.position.set(5,10,7.5); 
+      scene.add(dirLight);
+
       new RGBELoader().load(
         'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr', 
         (tex)=>{
@@ -463,27 +553,19 @@
           tex.dispose(); 
           pmrem.dispose();
         },
-        undefined, // onProgress (no necesario)
-        (err) => { // onError
+        undefined,
+        (err) => { 
           console.warn("No se pudo cargar el entorno HDR. Usando iluminación de fallback.", err);
-          // Fallback: Aumentar la luz ambiental si el HDR falla
           ambientLight.intensity = 1.0; 
           dirLight.intensity = 1.5;
         }
       );
       
-      // MODIFICADO: Guardar referencia a las luces para el fallback
-      const ambientLight = new THREE.AmbientLight(0x606060);
-      scene.add(ambientLight);
-      const dirLight = new THREE.DirectionalLight(0xffffff, 1.5); 
-      dirLight.position.set(5,10,7.5); 
-      scene.add(dirLight);
-
       controls = new OrbitControls(camera, renderer.domElement);
       controls.target.set(0,10,0);
       controls.enableDamping = true; controls.dampingFactor = 0.05;
 
-      spineGroup = createScolioticSpine(points2D); // Pasar puntos
+      spineGroup = createScolioticSpine(points2D_AP, points2D_LAT); // Pasar puntos
       scene.add(spineGroup, COBB_POINTS_GROUP, SCREWS_GROUP, RODS_GROUP);
 
       animate();
@@ -491,14 +573,14 @@
     }
 
     function animate(){
-    // ... (sin cambios) ...
+      // ... (sin cambios) ...
       requestAnimationFrame(animate);
       controls?.update?.();
       renderer?.render?.(scene, camera);
     }
 
     function onWindowResize(){
-    // ... (sin cambios) ...
+      // ... (sin cambios) ...
       if(!camera || !renderer) return;
       const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
       camera.aspect = w/h; camera.updateProjectionMatrix();
@@ -508,37 +590,66 @@
     function debounce(fn, wait){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), wait); } }
 
     // ---------- Construcción de columna (procedural mejorada) ----------
-    // MODIFICADO: Acepta puntos 2D para generar la curva
-    function createScolioticSpine(points2D = null){
+    
+    /**
+     * NUEVO: Refactorizado para procesar un array de puntos 2D en una función de curva 3D.
+     */
+    function processPointsToCurveMap(points2D, maxDeviation) {
+      if (!points2D || points2D.length < 2) return null;
+      try {
+        let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
+        for (const p of points2D) {
+          minY = Math.min(minY, p.y);
+          maxY = Math.max(maxY, p.y);
+          minX = Math.min(minX, p.x);
+          maxX = Math.max(maxX, p.x);
+        }
+        const pixelHeight = maxY - minY;
+        const pixelWidth = maxX - minX;
+        const pixelCenterX = minX + pixelWidth / 2;
+        
+        const curvePoints = points2D.map(p => {
+          const t_norm = (p.y - minY) / pixelHeight; 
+          const x_norm = (pixelWidth > 0) ? (p.x - pixelCenterX) / (pixelWidth / 2) : 0;
+          return new THREE.Vector3(x_norm, t_norm, 0); 
+        });
+        
+        curvePoints.sort((a, b) => a.y - b.y);
+        const interpCurve = new THREE.CatmullRomCurve3(curvePoints, false, 'catmullrom', 0.2);
+        
+        return (t_norm_0_to_1) => {
+          const pointOnCurve = interpCurve.getPointAt(t_norm_0_to_1);
+          return pointOnCurve.x * maxDeviation; // Devolver desviación 3D
+        };
+      } catch (err) {
+        console.error("Error al procesar la curva 2D, usando fallback:", err);
+        return null;
+      }
+    }
+    
+    // MODIFICADO: Acepta puntos 2D (AP y LAT)
+    function createScolioticSpine(points2D_AP = null, points2D_LAT = null){
       const group = new THREE.Group();
 
-      // ... (Materiales sin cambios) ...
+      // Materiales (sin cambios)
       const boneColor = new THREE.Color('#e7d7c9');
       const vertebraMaterialBase = new THREE.MeshStandardMaterial({ color: boneColor, roughness: 0.6, metalness: 0.05 });
       const discMaterialBase = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.85, metalness: 0.02 });
 
       const NUM_CERVICAL = 7, NUM_THORACIC = 12, NUM_LUMBAR = 5, NUM_MOBILE = 24;
       const baseVertebraHeight = 1.0, baseDiscHeight = 0.25;
-
       let currentY = 0;
 
-      // ... (Utilidades (subd, rand, latheBodyProfile) sin cambios) ...
+      // Utilidades (subd, rand, latheBodyProfile) (sin cambios)
       let subd = { modify: (g)=> g };
-      // ...
       if(!SubdivisionModifierSafe){
         loadSubdivisionModifier().then((Cls)=>{ if(Cls){ subd = new Cls(1); } });
       } else { subd = new SubdivisionModifierSafe(1); }
       const rand = (a,b)=> THREE.MathUtils.lerp(a,b, Math.random());
       function latheBodyProfile(scale, endplateConcavity=0.06){
-      // ...
-        const r = 1.2 * scale;
-        const h = 0.9 * scale;
-        const pts = [];
-        const steps = 12;
+        const r = 1.2 * scale; const h = 0.9 * scale; const pts = []; const steps = 12;
         for(let i=0;i<=steps;i++){
-          const t = i/steps; // 0..1 de inferior a superior
-          const y = -h/2 + h*t;
-          const belly = 1 - Math.pow(2*t-1, 2);
+          const t = i/steps; const y = -h/2 + h*t; const belly = 1 - Math.pow(2*t-1, 2);
           let radius = r * (0.82 + 0.18*belly);
           if(i===0 || i===steps){ radius *= (1 - endplateConcavity); }
           pts.push(new THREE.Vector2(radius, y));
@@ -546,16 +657,16 @@
         return pts;
       }
       
-      // ... (createVertebraDetailed sin cambios) ...
+      // createVertebraDetailed (MODIFICADO: Simplificado)
       function createVertebraDetailed(vertebraType, scale, i){
         const g = new THREE.Group();
-        // ... (Cuerpo vertebral)
+        // Cuerpo vertebral
         const profile = latheBodyProfile(scale, vertebraType==='lumbar'?0.08:vertebraType==='thoracic'?0.06:0.05);
         let bodyGeo = new THREE.LatheGeometry(profile, 28);
         if(subd && subd.modify) bodyGeo = subd.modify(bodyGeo);
         const body = new THREE.Mesh(bodyGeo, vertebraMaterialBase.clone());
         body.castShadow = body.receiveShadow = true;
-        // ... (Asignación de nombre anatómico)
+        // Asignación de nombre anatómico
         let anatomicalName = 'Vertebra';
         if (vertebraType === 'cervical') {
             anatomicalName = `C${i + 1}`; // C1-C7
@@ -570,42 +681,13 @@
         body.userData.anatomicalName = anatomicalName;
         body.userData.screws = null;
         g.add(body);
-        // ... (Pedículos, Láminas, etc. sin cambios)
-        if(vertebraType !== 'cervical'){
-          const pedR = 0.18*scale * (vertebraType==='lumbar'?1.3:1.0);
-          const pedL = new THREE.Mesh(new THREE.CylinderGeometry(pedR*0.9, pedR, 0.6*scale, 12), vertebraMaterialBase.clone());
-          const pedRMesh = pedL.clone();
-          pedL.rotation.z = Math.PI/2; pedRMesh.rotation.z = Math.PI/2;
-          const xOff = (vertebraType==='lumbar'?1.05:0.9)*scale;
-          const zOff = -0.25*scale;
-          pedL.position.set(-xOff, 0, zOff);
-          pedRMesh.position.set( xOff, 0, zOff);
-          g.add(pedL, pedRMesh);
-          const laminaW = (vertebraType==='lumbar'?1.2:0.9)*scale;
-          const laminaT = 0.18*scale;
-          const lamina = new THREE.Mesh(new THREE.BoxGeometry(laminaW, laminaT, 0.6*scale), vertebraMaterialBase.clone());
-          lamina.position.set(0, 0, -scale*1.0);
-          g.add(lamina);
-          const spinLen = (vertebraType==='thoracic'?1.8:vertebraType==='lumbar'?1.2:0.9)*scale;
-          const spin = new THREE.Mesh(new THREE.BoxGeometry(0.22*scale, 0.28*scale, spinLen), vertebraMaterialBase.clone());
-          spin.position.set(0, 0, -scale*1.0 - spinLen/2);
-          spin.rotation.x = (vertebraType==='thoracic'?0.55:vertebraType==='lumbar'?0.25:0.15);
-          g.add(spin);
-          const transLen = (vertebraType==='lumbar'?1.9:vertebraType==='thoracic'?1.6:1.4)*scale;
-          const trans = new THREE.Mesh(new THREE.BoxGeometry(transLen, 0.22*scale, 0.22*scale), vertebraMaterialBase.clone());
-          trans.position.set(0, 0, -0.35*scale);
-          g.add(trans);
-        } else {
-          // ... (Cervical)
-          const transLen = 1.8*scale;
-          const trans = new THREE.Mesh(new THREE.BoxGeometry(transLen, 0.18*scale, 0.22*scale), vertebraMaterialBase.clone());
-          trans.position.set(0, 0, -0.15*scale);
-          g.add(trans);
-          const foramen = new THREE.Mesh(new THREE.TorusGeometry(0.18*scale, 0.06*scale, 8, 14), discMaterialBase.clone());
-          foramen.position.set(transLen/2 - 0.2*scale, 0, -0.15*scale);
-          const foramen2 = foramen.clone(); foramen2.position.x *= -1; g.add(foramen, foramen2);
-        }
-        // ... (Guardar datos para discos)
+        
+        // --- INICIO DE CAMBIO ---
+        // Se elimina la adición de pedículos, láminas, apófisis espinosa y transversa.
+        // El cuerpo vertebral por sí solo ya es una buena representación simple.
+        // --- FIN DE CAMBIO ---
+
+        // Guardar datos para discos (sin cambios)
         const bbox = new THREE.Box3().setFromObject(body);
         const vHeight = bbox.getSize(new THREE.Vector3()).y;
         g.userData.height = vHeight;
@@ -614,61 +696,18 @@
         return g;
       }
 
-      // --- NUEVO: Procesamiento de curva 2D ---
-      let patientCurveMap = null; // Será una función: t (0..1) => x_desviacion (unidades 3D)
-      if (points2D && points2D.length > 1) {
-        try {
-          // 1. Encontrar límites de los puntos 2D (en coordenadas SVG)
-          let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
-          for (const p of points2D) {
-            minY = Math.min(minY, p.y);
-            maxY = Math.max(maxY, p.y);
-            minX = Math.min(minX, p.x);
-            maxX = Math.max(maxX, p.x);
-          }
-          const pixelHeight = maxY - minY;
-          const pixelWidth = maxX - minX;
-          const pixelCenterX = minX + pixelWidth / 2;
-          
-          // 2. Crear puntos 3D para la curva de interpolación
-          // Usamos (t_norm, x_norm, 0)
-          const curvePoints = points2D.map(p => {
-            // t_norm: 0 (arriba) a 1 (abajo)
-            const t_norm = (p.y - minY) / pixelHeight; 
-            // x_norm: -1 (izquierda) a 1 (derecha)
-            const x_norm = (pixelWidth > 0) ? (p.x - pixelCenterX) / (pixelWidth / 2) : 0;
-            
-            // Usamos Y para 't' y X para 'x'
-            return new THREE.Vector3(x_norm, t_norm, 0); 
-          });
-          
-          // Asegurarse de que los puntos estén ordenados por 't' (Y)
-          curvePoints.sort((a, b) => a.y - b.y);
-
-          // 3. Crear curva de interpolación
-          // MODIFICADO: Cambiado a 'catmullrom' y tensión 0.2 para una curva más suave (menos "triangular")
-          const interpCurve = new THREE.CatmullRomCurve3(curvePoints, false, 'catmullrom', 0.2);
-          
-          // 4. Crear la función "map"
-          const MAX_SCOLIOSIS_DEVIATION = 3.5; // Unidades 3D (ej. 3.5 unidades)
-          patientCurveMap = (t_norm_0_to_1) => {
-            const pointOnCurve = interpCurve.getPointAt(t_norm_0_to_1);
-            return pointOnCurve.x * MAX_SCOLIOSIS_DEVIATION; // Devolver desviación 3D
-          };
-          console.log("Curva 2D procesada y mapeada.");
-
-        } catch (err) {
-          console.error("Error al procesar la curva 2D, usando fallback:", err);
-          patientCurveMap = null; // Fallback
-        }
-      }
+      // --- NUEVO: Procesamiento de AMBAS curvas 2D ---
+      const MAX_CORONAL_DEVIATION = 3.5; // (AP) Desviación X
+      const MAX_SAGITTAL_DEVIATION = 3.0; // (LAT) Desviación Z
+      
+      let patientCurveMap_AP = processPointsToCurveMap(points2D_AP, MAX_CORONAL_DEVIATION);
+      let patientCurveMap_LAT = processPointsToCurveMap(points2D_LAT, MAX_SAGITTAL_DEVIATION);
       // --- FIN DE NUEVO CÓDIGO ---
-
 
       // Construcción con curvaturas...
       for(let i=0;i<NUM_MOBILE;i++){
         let vertebraType, scaleFactor;
-        // ... (Lógica de scaleFactor sin cambios) ...
+        // Lógica de scaleFactor (sin cambios)
         if(i<NUM_CERVICAL){
           vertebraType='cervical';
           scaleFactor = THREE.MathUtils.lerp(0.9,1.05, i/(NUM_CERVICAL-1));
@@ -685,38 +724,47 @@
         // Curvaturas: coronal (escoliosis), sagital (lordosis/kyphosis), axial (rotación)
         const t = i/(NUM_MOBILE-1); // t de 0 a 1
         
-        // --- MODIFICADO: Definición de xCurv ---
+        // --- MODIFICADO: Definición de xCurv (Coronal/AP) ---
         let xCurv;
-        if (patientCurveMap) {
-          // Usar la curva 2D del paciente
-          xCurv = patientCurveMap(t); 
+        if (patientCurveMap_AP) {
+          xCurv = patientCurveMap_AP(t); 
         } else {
-          // Usar la curva genérica de fallback
+          // Fallback coronal
           xCurv = Math.sin(t*Math.PI*2)*2.0; 
         }
-        // --- FIN DE MODIFICACIÓN ---
 
-        // La lógica de Z (lordosis/kyphosis) y rotaciones se mantiene igual (procedural)
-        let zOff=0, rotX=0, rotY=0;
-        if(vertebraType==='cervical'){ zOff = Math.sin(t*Math.PI*2.5)*-0.8*scaleFactor; rotX = Math.sin(t*Math.PI)*-0.12; rotY = Math.sin(t*Math.PI)*0.18; }
-        else if(vertebraType==='thoracic'){ zOff = Math.sin(t*Math.PI*2.0)*1.3*scaleFactor; rotX = Math.sin(t*Math.PI)*0.22; rotY = Math.sin(t*Math.PI)*0.28; }
-        else { zOff = Math.sin(t*Math.PI*1.6)*-1.1*scaleFactor; rotX = Math.sin(t*Math.PI)*-0.2; rotY = Math.sin(t*Math.PI)*0.22; }
+        // --- MODIFICADO: Definición de zOff (Sagital/LAT) ---
+        let zOff;
+        if (patientCurveMap_LAT) {
+          zOff = patientCurveMap_LAT(t);
+        } else {
+          // Fallback sagital (lógica procedural anterior)
+          if(vertebraType==='cervical'){ zOff = Math.sin(t*Math.PI*2.5)*-0.8*scaleFactor; }
+          else if(vertebraType==='thoracic'){ zOff = Math.sin(t*Math.PI*2.0)*1.3*scaleFactor; }
+          else { zOff = Math.sin(t*Math.PI*1.6)*-1.1*scaleFactor; }
+        }
+        
+        // Rotaciones (aún procedurales, podrían mejorarse en el futuro)
+        let rotX=0, rotY=0;
+        if(vertebraType==='cervical'){ rotX = Math.sin(t*Math.PI)*-0.12; rotY = Math.sin(t*Math.PI)*0.18; }
+        else if(vertebraType==='thoracic'){ rotX = Math.sin(t*Math.PI)*0.22; rotY = Math.sin(t*Math.PI)*0.28; }
+        else { rotX = Math.sin(t*Math.PI)*-0.2; rotY = Math.sin(t*Math.PI)*0.22; }
 
-        // ... (Wedge sin cambios) ...
+        // Wedge (sin cambios)
         if(vertebraType==='thoracic'){
           const wedge = THREE.MathUtils.lerp(-0.06, 0.06, Math.sin(t*Math.PI*2)*0.5+0.5);
-          vertebra.rotation.z += wedge; // ligera cuña en plano coronal
+          vertebra.rotation.z += wedge;
         }
 
-        // Posicionar (currentY se sigue usando para apilar verticalmente)
+        // Posicionar
         vertebra.position.set(xCurv, currentY, zOff);
         vertebra.rotation.x += rotX; vertebra.rotation.y += rotY;
 
         group.add(vertebra);
 
-        // Discos intervertebrales (sin cambios, usa el 'currentY' apilado)
+        // Discos intervertebrales (actualizados)
         if(i<NUM_MOBILE-1){
-          // ... (Lógica de discos sin cambios) ...
+          // ... (Lógica de tamaño de disco sin cambios) ...
           const nextScale = (i+1<NUM_CERVICAL)?THREE.MathUtils.lerp(0.9,1.05,(i+1)/(NUM_CERVICAL-1))
                            : (i+1<NUM_CERVICAL+NUM_THORACIC)?THREE.MathUtils.lerp(1.05,1.35,(i+1-NUM_CERVICAL)/(NUM_THORACIC-1))
                            : THREE.MathUtils.lerp(1.4,1.7,(i+1-(NUM_CERVICAL+NUM_THORACIC))/(NUM_LUMBAR-1));
@@ -726,16 +774,24 @@
           const disc = new THREE.Mesh(discGeo, discMaterialBase.clone());
           const nextY = currentY + vertebra.userData.height + discH/2;
           
-          // --- MODIFICADO: El disco también sigue la curva X ---
-          let discX;
-          if (patientCurveMap) {
-            const t_disc = (t + ( (i+1)/(NUM_MOBILE-1) )) / 2; // t en el punto medio del disco
-            discX = patientCurveMap(t_disc);
+          // --- MODIFICADO: El disco también sigue AMBAS curvas ---
+          const t_disc = (t + ( (i+1)/(NUM_MOBILE-1) )) / 2; // t en el punto medio del disco
+          let discX, discZ;
+          
+          if (patientCurveMap_AP) {
+            discX = patientCurveMap_AP(t_disc);
           } else {
-            discX = Math.sin( (t + ( (i+1)/(NUM_MOBILE-1) )) / 2 * Math.PI * 2 ) * 2.0;
+            discX = Math.sin( t_disc * Math.PI * 2 ) * 2.0; // Fallback AP
           }
           
-          disc.position.set(discX, nextY, zOff); // Usar zOff de la vértebra actual (simplificación)
+          if (patientCurveMap_LAT) {
+            discZ = patientCurveMap_LAT(t_disc);
+          } else {
+            // Fallback LAT (simplificado)
+            discZ = zOff; 
+          }
+          
+          disc.position.set(discX, nextY, discZ);
           disc.rotation.x = vertebra.rotation.x; disc.rotation.y = vertebra.rotation.y;
           group.add(disc);
           currentY = nextY + discH/2; // avanzar pila
@@ -744,23 +800,33 @@
         }
       }
 
-      // Sacro + coxis (sin cambios)
-      const sacrumGeo = new THREE.CylinderGeometry(1.9, 1.2, 3.2, 28);
-      // ...
-      const sacrum = new THREE.Mesh((subd && subd.modify)? subd.modify(sacrumGeo) : sacrumGeo, vertebraMaterialBase.clone());
-      sacrum.position.set(0, currentY + 1.6, 1.2); sacrum.rotation.x = 0.45; group.add(sacrum);
-      currentY += 3.2;
-      const coccyx = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 12), vertebraMaterialBase.clone());
-      coccyx.position.set(0, currentY - 1.2, 0.9); coccyx.rotation.x = 0.9; group.add(coccyx);
+      // Sacro + coxis (simplificado también)
+      // Se crea un "sacro" más simple, similar a una vértebra grande.
+      const sacrumScale = 1.9;
+      const sacrumProfile = latheBodyProfile(sacrumScale, 0.1); // Usar profile similar a vértebra
+      let sacrumGeo = new THREE.LatheGeometry(sacrumProfile, 28);
+      if(subd && subd.modify) sacrumGeo = subd.modify(sacrumGeo);
+      const sacrum = new THREE.Mesh(sacrumGeo, vertebraMaterialBase.clone());
+      sacrum.position.set(0, currentY + sacrumScale * 1.2, 1.2); 
+      sacrum.rotation.x = 0.45; 
+      sacrum.rotation.y = 0.2; // Ligera rotación para simular la forma
+      group.add(sacrum);
+      currentY += sacrumScale * 2.4; // Ajustar avance para el sacro simplificado
 
-      // Elevar y orientar conjunto para cámara por defecto
+      // El cóccix puede ser un poco más pequeño
+      const coccyx = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 12), vertebraMaterialBase.clone());
+      coccyx.position.set(0, currentY - 1.0, 0.9); 
+      coccyx.rotation.x = 0.9; 
+      group.add(coccyx);
+
+      // Elevar y orientar conjunto
       group.rotation.x = Math.PI; group.position.y = (currentY/2) + 10;
       return group;
     }
 
     // ---------- Interacción (raycast) ----------
     function onCanvasMouseDown(event){
-    // ... (sin cambios) ...
+      // ... (sin cambios) ...
       if(toolMode==='rod') return; 
       const rect = canvas.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left)/rect.width)*2 - 1;
@@ -789,7 +855,7 @@
 
     // ---------- Herramientas ----------
     function resetToolMode(keepCobbPanel=false){ 
-    // ... (sin cambios, la lógica de limpieza de puntos de cobb está bien) ...
+      // ... (sin cambios) ...
       const prev = toolMode; toolMode = null;
       cobbButton.classList.remove('tool-active');
       screwsButton.classList.remove('tool-active');
@@ -806,9 +872,8 @@
       if(prev==='rod') RODS_GROUP.clear();
     }
 
-    // ... (Listeners de botones de herramientas (cobb, screws, rod) sin cambios) ...
+    // Listeners de botones de herramientas (sin cambios)
     cobbButton.addEventListener('click', ()=>{
-    // ...
       if(toolMode==='cobb') { resetToolMode(); return; }
       resetToolMode(true); toolMode='cobb'; cobbButton.classList.add('tool-active');
       cobbResultsPanel.classList.remove('hidden');
@@ -816,7 +881,6 @@
       showToast('Modo Cobb activo');
     });
     screwsButton.addEventListener('click', ()=>{
-    // ...
       if(toolMode==='screws'){ resetToolMode(); return; }
       resetToolMode(); 
       toolMode='screws'; 
@@ -825,7 +889,6 @@
       showToast('Modo Tornillos activo: Clic en vértebras');
     });
     rodButton.addEventListener('click', ()=>{
-    // ...
       if(toolMode==='rod'){ resetToolMode(); return; }
       resetToolMode(); 
       toolMode='rod'; 
@@ -833,7 +896,7 @@
       simulateCorrectionRod(); 
     });
     
-    // ... (Lógica de Cobb (save, clear, history, etc.) sin cambios) ...
+    // Lógica de Cobb (save, clear, history, etc.) (sin cambios)
     clearCobbButton.addEventListener('click', ()=> resetToolMode(true));
     saveCobbButton.addEventListener('click', ()=>{
       if(cobbClickPoints.length === 6 && currentCobbAngle > 0){
@@ -847,7 +910,6 @@
       }
     });
     function updateCobbHistoryUI(){
-    // ...
       cobbMeasurementsList.innerHTML = '';
       if(savedCobbMeasurements.length===0){
         cobbHistoryPanel.classList.add('hidden');
@@ -866,7 +928,6 @@
     const cobbPointMaterialTop = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.8 });
     const cobbPointMaterialBottom = new THREE.MeshBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.8 });
     function handleCobbPointClick(clickData) {
-    // ...
         if (cobbClickPoints.length >= 6) {
             showToast('Ya se han seleccionado 6 puntos. Limpie para una nueva medición.');
             return;
@@ -886,7 +947,6 @@
         }
     }
     function updateCobbPanelUI() {
-    // ...
         const topPoints = Math.min(cobbClickPoints.length, 3);
         const bottomPoints = Math.max(0, cobbClickPoints.length - 3);
         cobbSelectedPoints.innerHTML = `Puntos placa superior: ${topPoints}/3<br/>Puntos placa inferior: ${bottomPoints}/3`;
@@ -901,11 +961,9 @@
         }
     }
     function acuteAngleRad(r){
-    // ...
       let d = Math.abs(r); if(d>Math.PI) d = 2*Math.PI - d; if(d>Math.PI/2) d = Math.PI - d; return d;
     }
     function calculateCobbAngleFromPoints() {
-    // ...
         if (cobbClickPoints.length < 3) return;
         const lineMaterialTop = new THREE.LineBasicMaterial({ color: 0x00ff00 }); // Verde
         const lineMaterialBottom = new THREE.LineBasicMaterial({ color: 0xffa500 }); // Naranja
@@ -950,9 +1008,8 @@
         cobbResult.textContent = `${currentCobbAngle.toFixed(1)}°`;
     }
     
-    // ... (Lógica de Tornillos (handleScrewSelection, place, remove) sin cambios) ...
+    // Lógica de Tornillos (handleScrewSelection, place, remove) (sin cambios)
     function handleScrewSelection(bodyMesh) {
-    // ...
       if (bodyMesh.userData.screws && bodyMesh.userData.screws.length > 0) {
         removePedicleScrewsAt(bodyMesh);
         showToast(`Tornillos quitados de ${bodyMesh.userData.anatomicalName}`);
@@ -962,32 +1019,40 @@
       }
     }
     function placePedicleScrewsAt(bodyMesh) {
-    // ...
       const parent = bodyMesh.parent; 
       if (!parent || !bodyMesh.geometry.parameters) {
         console.warn('No se puede colocar tornillo: falta el grupo padre o los parámetros de geometría.');
         return;
       }
+      // Para las vértebras simplificadas, ajustamos la posición del tornillo.
+      // Los tornillos ahora se colocarán directamente en el "cuerpo" simple de la vértebra.
       const center = new THREE.Vector3(); 
       bodyMesh.getWorldPosition(center);
-      const radius = bodyMesh.geometry.parameters?.radiusTop || bodyMesh.geometry.parameters?.radius || 1.0;
-      const posterior = -radius * 0.5;
-      const lateral = radius * 0.8;
-      const Llocal = new THREE.Vector3(-lateral, 0, posterior); 
-      const Rlocal = new THREE.Vector3(lateral, 0, posterior);
+      
+      // Ajustar las posiciones de los tornillos para el modelo simplificado
+      // Aquí puedes experimentar con los valores para que se vean bien
+      const lateralOffset = bodyMesh.userData.radiusTop * 0.7; // Más hacia el centro
+      const posteriorOffset = bodyMesh.userData.height * 0.1; // Ligeramente hacia atrás del centro
+
+      const Llocal = new THREE.Vector3(-lateralOffset, 0, posteriorOffset); 
+      const Rlocal = new THREE.Vector3(lateralOffset, 0, posteriorOffset);
+
       const L = Llocal.clone().applyMatrix4(parent.matrixWorld);
       const R = Rlocal.clone().applyMatrix4(parent.matrixWorld);
+      
       const screwL = new THREE.Mesh(screwGeometry, screwMaterial); 
       screwL.position.copy(L);
+      // Orientación del tornillo: apuntar hacia el centro de la vértebra
       screwL.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, L).normalize()));
+      
       const screwR = new THREE.Mesh(screwGeometry, screwMaterial); 
       screwR.position.copy(R);
       screwR.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3().subVectors(center, R).normalize()));
+      
       SCREWS_GROUP.add(screwL, screwR);
       bodyMesh.userData.screws = [screwL, screwR];
     }
     function removePedicleScrewsAt(bodyMesh) {
-    // ...
       const screws = bodyMesh.userData.screws;
       if (screws && screws.length > 0) {
         screws.forEach(screw => {
@@ -997,9 +1062,8 @@
       bodyMesh.userData.screws = null;
     }
 
-    // ... (Simulación de Barra (simulateCorrectionRod) sin cambios) ...
+    // Simulación de Barra (simulateCorrectionRod) (sin cambios)
     function simulateCorrectionRod(){
-    // ...
       RODS_GROUP.clear();
       if(SCREWS_GROUP.children.length < 4) {
          showToast('Error: Debe colocar al menos 4 tornillos (en 2 vértebras) para simular una barra.');
@@ -1024,12 +1088,11 @@
 
     // ---------- Exportación ----------
     exportButton.addEventListener('click', ()=>{
-    // ... (sin cambios) ...
       const payload = buildExportPayload();
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type:'application/json' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `plan_gemelo_digital_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+      a.download = `plan_gemelo_digital_AP-LAT_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
       a.click();
       URL.revokeObjectURL(a.href);
       canvas.toBlob((png)=>{
@@ -1038,8 +1101,8 @@
       showToast('Plan exportado (JSON + PNG)');
     });
 
+    // MODIFICADO: Incluir ambos arrays de puntos
     function buildExportPayload(){
-    // ... (sin cambios) ...
       const screws = SCREWS_GROUP.children.map((m,idx)=>{
         const p = new THREE.Vector3(); m.getWorldPosition(p);
         const q = new THREE.Quaternion(); m.getWorldQuaternion(q);
@@ -1047,11 +1110,12 @@
       });
       const cobb = savedCobbMeasurements.slice();
       return {
-        app: 'Gemelo Digital (demo) - Escoliosis',
+        app: 'Gemelo Digital (demo) - Escoliosis (AP+LAT)',
         timestamp: new Date().toISOString(),
-        patientImage: fileNameEl.textContent || null,
-        // NUEVO: Incluir los puntos 2D trazados (en coordenadas SVG)
-        patientCurvePoints2D: patientSpinePoints2D,
+        patientImageAP: fileNameElAP.textContent || null,
+        patientImageLAT: fileNameElLAT.textContent || null,
+        patientCurvePoints2D_AP: patientSpinePoints2D_AP, // (SVG coords)
+        patientCurvePoints2D_LAT: patientSpinePoints2D_LAT, // (SVG coords)
         cobbMeasurements: cobb,
         screwCount: screws.length,
         screws,
@@ -1061,7 +1125,7 @@
 
     // ---------- Atajos de teclado ----------
     document.addEventListener('keydown', (e)=>{
-    // ... (sin cambios) ...
+      // ... (sin cambios) ...
       if(e.target && ['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
       const k = e.key.toLowerCase();
       if(k==='c' && !cobbButton.disabled) cobbButton.click();
@@ -1083,21 +1147,15 @@
 
     // ========== TESTS BÁSICOS (auto) ==========
     function runSelfTests(){
-    // ... (sin cambios) ...
+      // ... (sin cambios) ...
       try{
         console.group('%cSelfTests Gemelo Digital','color:#a7f3d0');
-        // Test 1: acuteAngleRad
         const d1 = acuteAngleRad(THREE.MathUtils.degToRad(170));
         console.assert(Math.abs(THREE.MathUtils.radToDeg(d1)-10)<1e-6, 'acuteAngleRad falla para 170°');
-        // Test 2: Lógica de Plano
-        const p1 = new THREE.Vector3(0, 0, 0);
-        const p2 = new THREE.Vector3(1, 0, 0);
-        const p3 = new THREE.Vector3(0, 1, 0);
+        const p1 = new THREE.Vector3(0, 0, 0); const p2 = new THREE.Vector3(1, 0, 0); const p3 = new THREE.Vector3(0, 1, 0);
         const planeXY = new THREE.Plane().setFromCoplanarPoints(p1, p2, p3);
         console.assert(Math.abs(planeXY.normal.z) > 0.99, 'Cálculo de plano falla para plano XY');
-        const p4 = new THREE.Vector3(0, 0, 0);
-        const p5 = new THREE.Vector3(1, 1, 0);
-        const p6 = new THREE.Vector3(0, 1, 0);
+        const p4 = new THREE.Vector3(0, 0, 0); const p5 = new THREE.Vector3(1, 1, 0); const p6 = new THREE.Vector3(0, 1, 0);
         const planeXY_2 = new THREE.Plane().setFromCoplanarPoints(p4, p5, p6);
         console.assert(Math.abs(planeXY_2.normal.z) > 0.99, 'Cálculo de plano falla para plano XY (2)');
         console.groupEnd();
@@ -1107,8 +1165,9 @@
       }
     }
 
-    // Inicializar historial y tests en carga
+    // Inicializar
     document.addEventListener('DOMContentLoaded', ()=>{ updateCobbHistoryUI(); runSelfTests(); });
   </script>
 </body>
 </html>
+
